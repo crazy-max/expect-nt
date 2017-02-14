@@ -1,0 +1,3 @@
+#! tclsh80
+
+puts "This is Tcl 8.0"

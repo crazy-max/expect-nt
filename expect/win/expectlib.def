@@ -1,0 +1,43 @@
+LIBRARY    expectlib52.dll
+EXETYPE WINDOWS
+CODE PRELOAD MOVEABLE DISCARDABLE
+DATA PRELOAD MOVEABLE MULTIPLE
+
+EXPORTS
+	; Functions
+	exp_spawnv
+	exp_spawnl
+	exp_spawnfd
+	exp_expectv
+	exp_expectl
+	exp_popen
+	exp_closefd
+	exp_printf
+	exp_puts
+	exp_putc
+	exp_write
+	exp_read
+	exp_waitpid
+	exp_kill
+	exp_perror
+	exp_strerror
+	exp_setblocking
+
+	; Global variables
+	exp_pid
+	exp_timeout
+	exp_buffer
+	exp_buffer_end
+	exp_match
+	exp_match_end
+	exp_match_max
+	exp_full_buffer
+	exp_remove_nulls
+	exp_pty_timeout
+	exp_autoallocpty
+	exp_pid
+	exp_stty_init
+	exp_ttycopy
+	exp_ttyinit
+	exp_console
+	exp_nt_debug

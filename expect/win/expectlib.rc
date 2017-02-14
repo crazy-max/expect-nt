@@ -1,0 +1,35 @@
+// Used Sun tcl.rc file as an example
+
+#define RESOURCE_INCLUDED
+#include <exp_version.h>
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 	EXP_MAJOR_VERSION,EXP_MINOR_VERSION,EXP_RELEASE_LEVEL,EXP_RELEASE_SERIAL
+ PRODUCTVERSION EXP_MAJOR_VERSION,EXP_MINOR_VERSION,EXP_RELEASE_LEVEL,EXP_RELEASE_SERIAL
+ FILEFLAGSMASK 	0x3fL
+ FILEFLAGS 	0x0L
+ FILEOS 	0x4L
+ FILETYPE 	0x2L
+ FILESUBTYPE 	0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040a04b0"
+        BEGIN
+            VALUE "FileDescription", "Expectlib DLL\0"
+            VALUE "OriginalFilename", "expectlib" STRINGIFY(EXP_MAJOR_VERSION) STRINGIFY(EXP_MINOR_VERSION) ".dll\0"
+            VALUE "CompanyName", "Mitel, Inc\0"
+            VALUE "FileVersion", EXP_PATCH_LEVEL
+            VALUE "LegalCopyright", "Copyright \251 Mitel Corporation 1997\0"
+            VALUE "ProductName", "Expectlib " EXP_VERSION " for Windows NT\0"
+            VALUE "ProductVersion", EXP_PATCH_LEVEL
+	    VALUE "Comments", "Expect was written for Unix by Don Libes at NIST.  This is a Windows NT only port.\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x40a, 1200
+    END
+END
+
+// init SCRIPT "initscript.tcl"

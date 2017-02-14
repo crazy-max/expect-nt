@@ -1,0 +1,37 @@
+Known bug list for Tk 8.0 for Macintosh
+
+by Ray Johnson
+Sun Microsystems Laboratories
+rjohnson@eng.sun.com
+
+SCCS: @(#) bugs.doc 1.9 97/08/13 19:33:15
+
+We are now very close to passing the test suite for Tk.  We are very
+interested in finding remaining bugs that still linger.  Please let us
+know (and send us test cases) of any bugs you find.
+
+Known bugs:
+
+* Transient windows (set by wm transient) do not go away when the
+  master does.
+
+* Tearoff menus should be floating windows & floating windows should
+  float.  They also shouldn't be resizable.
+
+* The -use and -contaier windows only work with other Tk windows.
+  Unfortunantly, focus doesn't work in between windows.  We are
+  actually going to need to do an overhaul of the subwindow
+  architecture to fix the problems.
+
+* The send command is not yet implemented.
+
+* Drawing is not really correct.  This shows up mostly in the canvas
+  when line widths are greater than one.  Unfortunantly, this will not
+  be easy to fix.
+
+There are many other bugs.  However, will no get listed until they
+are reported at least once.  Send those bug reports in!
+
+
+
+Ray

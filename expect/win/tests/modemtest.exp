@@ -1,0 +1,18 @@
+# modemtest.exp
+#
+# Expect script to test modem with redirected handles.  To be used
+# in conjunction with testmodem.exe
+
+load expect52.dll Expect
+
+send -i exp_tty "Modemtest 1\n"
+
+set timeout 10
+
+send "AT\r"
+send -i exp_tty "Send AT\n"
+
+expect {
+    "OK" {send -i exp_tty "Saw OK\n"}
+    timeout {send -i exp_tty "Timed out waiting for OK\n"}
+}

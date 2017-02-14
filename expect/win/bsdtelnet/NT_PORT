@@ -1,0 +1,10 @@
+* sys_bsd.cpp
+  Need to change code to select from tty.
+* Need to handle SIGINT
+
+
+* Problem: line mode is not handled correctly.  We always read a single
+  character from the keyboard and send it immediately.  We do not buffer
+  the keyboard.  Test by connecting to port 80 of a machine.
+
+* Problem: Doesn't work correctly with FreeBSD.

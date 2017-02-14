@@ -1,0 +1,31 @@
+# Commands covered:  Pipeline test for a previous race condition
+#
+# This file contains a collection of tests for one or more of the Expect
+# command capabilities.  Sourcing this file into Tcl runs the tests and
+# generates output for errors.  No output means no errors were found.
+#
+# Copyright (c) 1997 Mitel, Inc.
+#
+# See the file "license.terms" for information on usage and redistribution
+# of this file, and for a DISCLAIMER OF ALL WARRANTIES.
+#
+# RCS: $Header: /disk/3/CVSROOT/Mitel/expect/win/tests/pipe.test,v 1.2 1997/09/09 19:24:57 chaffee Exp $
+
+if {[string compare test [info procs test]] == 1} then {source defs}
+
+catch {unset a}
+catch {unset x}
+
+test pipe-1.1 {tests of pipes} {
+    if [catch {
+	for {set i 0} {$i < 20} {incr i} {
+	    set x [exec echo hello | testcalc.exe]
+	    if {$x == "calc: Unknown command: hello\ncalc: "} {
+		set ok 1
+	    } else {
+		error "unexpected output from pipe: |$x|"
+	    }
+	}
+    } msg] {} else {set msg 1}
+    set msg
+} {1}

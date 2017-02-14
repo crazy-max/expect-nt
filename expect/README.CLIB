@@ -1,0 +1,32 @@
+The Expectlib support has been changed to potentially support multiple
+platforms.  Currently, it only supports Windows NT.  This will break
+current programs that make use of it.  There are some examples using
+this library in testclib.c.
+
+Here is a list of some of the changes to Expectlib:
+
+* Routines no longer take FILE pointers and file descriptors as
+  arguments.  These have been replaced by opaque Expectlib handles.
+
+* exp_fexpectl() and exp_fexpectv() no longer exist.  Use exp_expectl()
+  and exp_expectv().
+
+* exp_spawnfd() converts native file handle to an opaque Expectlib handle.
+
+* exp_closefd() needs to be called instead of close().
+
+* exp_printf(), exp_puts(), exp_putc(), and exp_write() can be used to
+ write to Expectlib handles.
+
+* exp_read() can be used to read from Expectlib handles.  Be careful
+  with this one.  Don't interleave with exp_expect[lv] calls since
+  exp_expect[lv] buffer input.
+
+* exp_waitpid() needs to be used instead of waitpid().
+
+* exp_kill() will kill a process id.
+
+* exp_stty() is not provided.
+
+* On Windows NT, if you set the variable exp_nt_debug to 1, you will
+  see subprocess consoles.  This is useful for debugging purposes.

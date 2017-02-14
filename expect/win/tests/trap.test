@@ -1,0 +1,105 @@
+# Commands covered: trap, kill
+#
+# This file contains a collection of tests for one or more of the Expect
+# command capabilities.  Sourcing this file into Tcl runs the tests and
+# generates output for errors.  No output means no errors were found.
+#
+# Copyright (c) 1997 Mitel, Inc.
+#
+# See the file "license.terms" for information on usage and redistribution
+# of this file, and for a DISCLAIMER OF ALL WARRANTIES.
+#
+# RCS: $Header: /disk/3/CVSROOT/Mitel/expect/win/tests/trap.test,v 1.1 1997/11/13 12:16:36 chaffee Exp $
+
+if {[string compare test [info procs test]] == 1} then {source defs}
+
+catch {unset a}
+catch {unset x}
+
+# Basic trap tests.
+
+test trap-1.1 {trap SIGQUIT} {
+    if [catch {
+	global ok 0
+	spawn expect.exe trap.tcl
+
+	# Wait for process to get started
+	after 3000
+
+	kill 3
+	expect {
+	    "Caught SIGQUIT" {}
+	    timeout {error "Expect did not catch first SIGQUIT"}
+	    eof {error "Expect did not catch first SIGQUIT"}
+	}
+	kill 3
+	expect {
+	    "Caught SIGQUIT" {}
+	    timeout {error "Expect did not catch second SIGQUIT"}
+	    eof {error "Expect did not catch second SIGQUIT"}
+	}
+
+	kill 9
+	expect {
+	    eof {set ok 1}
+	}
+    } msg] {} else {set msg $ok}
+    catch {close}
+    catch {wait}
+    set msg
+} {1}
+
+# There is a problem with DBG_CONTROL_EVENT not properly propagating
+# through the debugger.  This seems to be an NT 4.0 problem, but it
+# may exist in other version of Windows NT.  This test will fail.
+test trap-1.2 {trap SIGINT} {
+    if [catch {
+	global ok 0
+	spawn expect.exe trap.tcl
+
+	# Wait for process to get started
+	after 3000
+
+	kill 2
+	expect {
+	    "Caught SIGINT" {}
+	    timeout {error "Expect did not catch first SIGINT.  This is a problem with Windows NT 4.0."}
+	    eof {error "Expect did not catch first SIGINT"}
+	}
+	kill 2
+	expect {
+	    "Caught SIGINT" {}
+	    timeout {error "Expect did not catch second SIGINT"}
+	    eof {error "Expect did not catch second SIGINT"}
+	}
+	kill 9
+	expect {
+	    eof {set ok 1}
+	}
+    } msg] {} else {set msg $ok}
+    catch {close}
+    catch {wait}
+    set msg
+} {1}
+
+test trap-1.3 {trap SIGQUIT with spawned telnet} {
+    if [catch {
+	global ok 0
+	spawn expect.exe trap2.tcl
+
+	# Wait for the spawned telnet in trap2.tcl to get connected
+	after 10000
+
+	kill 3
+	expect {
+	    "Caught SIGQUIT" {}
+	    timeout {error "Expect did not catch first SIGQUIT"}
+	    eof {error "Expect did not catch first SIGQUIT"}
+	}
+	# Make sure the telnet has closed
+	after 5000
+    } msg] {} else {set msg $ok}
+    catch {close}
+    catch {wait}
+    set msg
+} {1}

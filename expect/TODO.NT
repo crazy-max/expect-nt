@@ -1,0 +1,24 @@
+* Intercept all console input functions.  The input functions are needed to
+  do the proper echoing.  Currently, too much can be echoed if using the
+  low level console input reading calls.
+
+  FlushConsoleInputBuffer
+  ReadConsole	
+  ReadConsoleInput	
+
+* Intercept these all low level console output functions:
+    CreateConsoleScreenBuffer
+    FillConsoleOutputCharacter
+    ScrollConsoleScreenBuffer
+    SetConsoleActiveScreenBuffer
+    SetConsoleScreenBufferSize
+    SetConsoleWindowInfo
+    SetStdHandle
+ 
+* Make sure the appropriate translation occurs when reading input from
+  stdin with the expect and expect_user commands.  Currently, it seems
+  the \r\n is not translated to a \n as it should be.
+
+* There is a problem with trapping Ctrl-C in processes controlled by
+  Expect.  This is due to a bug in at least NT 4.0.  I don't know if
+  it exists in any other version of Windows NT.
