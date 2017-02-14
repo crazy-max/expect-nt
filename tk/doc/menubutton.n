@@ -5,7 +5,7 @@
 '\" See the file "license.terms" for information on usage and redistribution
 '\" of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 '\" 
-'\" SCCS: @(#) menubutton.n 1.35 97/05/20 20:32:02
+'\" SCCS: @(#) menubutton.n 1.36 97/10/31 12:58:49
 '\" 
 .so man.macros
 .TH menubutton n 4.0 Tk "Tk Built-In Commands"
@@ -14,7 +14,7 @@
 .SH NAME
 menubutton \- Create and manipulate menubutton widgets
 .SH SYNOPSIS
-\fBmenubutton\fI \fIpathName \fR?\fIoptions\fR?
+\fBmenubutton\fR \fIpathName \fR?\fIoptions\fR?
 .SO
 \-activebackground	\-cursor	\-highlightthickness	\-takefocus
 \-activeforeground	\-disabledforeground	\-image	\-text

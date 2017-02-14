@@ -152,4 +152,4 @@ EXTERN ExpHandle exp_spawnfd	_ANSI_ARGS_((int filehandle));
 EXTERN void exp_perror		_ANSI_ARGS_((char *string));
 EXTERN char *exp_strerror	_ANSI_ARGS_((void));
 EXTERN int exp_setblocking	_ANSI_ARGS_((ExpHandle handle, int mode));
-
+EXTERN void exp_setdebug	_ANSI_ARGS_((char *file, int mode));

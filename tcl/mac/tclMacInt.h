@@ -8,7 +8,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclMacInt.h 1.23 97/07/28 11:04:00
+ * SCCS: @(#) tclMacInt.h 1.24 97/09/09 16:22:01
  */
 
 #ifndef _TCLMACINT
@@ -32,6 +32,14 @@
 
 #define TCL_MAC_68K_STACK_GROWTH (256*1024)
 #define TCL_MAC_STACK_THRESHOLD 16384
+
+/*
+ * This flag is passed to TclMacRegisterResourceFork
+ * by a file (usually a library) whose resource fork
+ * should not be closed by the resource command.
+ */
+ 
+#define TCL_RESOURCE_DONT_CLOSE  2
 
 /*
  * Typedefs used by Macintosh parts of Tcl.
@@ -62,7 +70,10 @@ EXTERN int	TclMacOSErrorToPosixError _ANSI_ARGS_((int error));
 EXTERN void	TclMacRemoveTimer _ANSI_ARGS_((void *timerToken));
 EXTERN void *	TclMacStartTimer _ANSI_ARGS_((long ms));
 EXTERN int	TclMacTimerExpired _ANSI_ARGS_((void *timerToken));
-
+EXTERN int	TclMacRegisterResourceFork _ANSI_ARGS_((short fileRef, Tcl_Obj *tokenPtr,
+                    int insert));	
+EXTERN short	TclMacUnRegisterResourceFork _ANSI_ARGS_((char *tokenPtr, Tcl_Obj *resultPtr));	
+		    
 #pragma export reset
 
 #endif /* _TCLMACINT */

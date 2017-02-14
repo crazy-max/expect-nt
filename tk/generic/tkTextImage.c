@@ -10,7 +10,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkTextImage.c 1.6 97/04/30 15:55:44
+ * SCCS: @(#) tkTextImage.c 1.7 97/08/25 15:47:27
  */
 
 #include "tk.h"
@@ -93,10 +93,10 @@ static Tk_CustomOption alignOption = {AlignParseProc, AlignPrintProc,
 static Tk_ConfigSpec configSpecs[] = {
     {TK_CONFIG_CUSTOM, "-align", (char *) NULL, (char *) NULL,
 	"center", 0, TK_CONFIG_DONT_SET_DEFAULT, &alignOption},
-    {TK_CONFIG_INT, "-padx", (char *) NULL, (char *) NULL,
+    {TK_CONFIG_PIXELS, "-padx", (char *) NULL, (char *) NULL,
 	"0", Tk_Offset(TkTextEmbImage, padX),
 	TK_CONFIG_DONT_SET_DEFAULT},
-    {TK_CONFIG_INT, "-pady", (char *) NULL, (char *) NULL,
+    {TK_CONFIG_PIXELS, "-pady", (char *) NULL, (char *) NULL,
 	"0", Tk_Offset(TkTextEmbImage, padY),
 	TK_CONFIG_DONT_SET_DEFAULT},
     {TK_CONFIG_STRING, "-image", (char *) NULL, (char *) NULL,
@@ -356,6 +356,13 @@ EmbImageConfigure(textPtr, eiPtr, argc, argv)
     name = eiPtr->body.ei.imageName;
     if (name == NULL) {
     	name = eiPtr->body.ei.imageString;
+    }
+    if (name == NULL) {
+        Tcl_AppendResult(textPtr->interp,"Either a \"-name\" ",
+		"or a \"-image\" argument must be provided ",
+		"to the \"image create\" subcommand.",
+		(char *) NULL);
+	return TCL_ERROR;
     }
     len = strlen(name);
     for (hPtr = Tcl_FirstHashEntry(&textPtr->imageTable, &search);

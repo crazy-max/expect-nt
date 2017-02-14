@@ -1,0 +1,35 @@
+// @(#) tk.rc 1.4 95/09/29 18:32:12
+//
+// Version
+//
+
+#include <ver.h>
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 0,0,0,0
+ PRODUCTVERSION 0,0,0,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x4L
+ FILETYPE 0x2L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "JessiKat SoftWare\0"
+            VALUE "FileDescription", "DDE DLL\0"
+            VALUE "FileVersion", "1.1\0"
+            VALUE "InternalName", "dde.dll\0"
+            VALUE "LegalCopyright", "Copyright \006Nov/1996\0"
+            VALUE "OriginalFilename", "DDE11.dll\0"
+            VALUE "ProductName", "DDE 1.1 for Windows\0"
+            VALUE "ProductVersion", "1.1\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

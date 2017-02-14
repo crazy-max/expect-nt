@@ -12,7 +12,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkWindow.c 1.232 97/08/06 21:42:15
+ * SCCS: @(#) tkWindow.c 1.233 97/10/31 09:55:23
  */
 
 #include "tkPort.h"
@@ -427,6 +427,7 @@ GetScreen(interp, screenName, screenPtr)
 	    dispPtr->lastDestroyRequest = 0;
 	    dispPtr->cmapPtr = NULL;
 	    dispPtr->implicitWinPtr = NULL;
+	    dispPtr->focusPtr = NULL;
 	    dispPtr->stressPtr = NULL;
 	    dispPtr->delayedMotionPtr = NULL;
 	    Tcl_InitHashTable(&dispPtr->winTable, TCL_ONE_WORD_KEYS);
@@ -735,11 +736,8 @@ TkCreateMainWindow(interp, screenName, baseName)
     Tcl_InitHashTable(&mainPtr->nameTable, TCL_STRING_KEYS);
     TkBindInit(mainPtr);
     TkFontPkgInit(mainPtr);
-    mainPtr->focusPtr = NULL;
-    mainPtr->focusWinPtr = NULL;
-    mainPtr->focusSerial = 0;
-    mainPtr->focusOnMapPtr = NULL;
-    mainPtr->forceFocus = 0;
+    mainPtr->tlFocusPtr = NULL;
+    mainPtr->displayFocusPtr = NULL;
     mainPtr->optionRootPtr = NULL;
     Tcl_InitHashTable(&mainPtr->imageTable, TCL_STRING_KEYS);
     mainPtr->strictMotif = 0;

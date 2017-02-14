@@ -1,10 +1,10 @@
-Tcl 8.0b2 for Windows
+Tcl 8.0p2 for Windows
 
 by Scott Stanton
 Sun Microsystems Laboratories
 scott.stanton@eng.sun.com
 
-SCCS: @(#) README 1.23 97/08/13 18:54:48
+SCCS: @(#) README 1.25 97/11/21 15:15:40
 
 1. Introduction
 ---------------
@@ -91,10 +91,6 @@ appropriate makefile for your compiler.
 Here is the current list of known bugs/missing features for the
 Windows version of Tcl:
 
-- Solstice NFS interacts badly with Tcl, files linger after close
-- Sockets have been known to hang during high load.  There are still
-  some unresolved problems in the socket code where close events may
-  get lost.
 - Blocking "after" commands (e.g. "after 3000") don't work on Win32s.
 - Clock command fails to handle daylight savings time boundaries for
   things like "last week".

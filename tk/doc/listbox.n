@@ -1,20 +1,20 @@
 '\"
 '\" Copyright (c) 1990 The Regents of the University of California.
-'\" Copyright (c) 1994-1996 Sun Microsystems, Inc.
+'\" Copyright (c) 1994-1997 Sun Microsystems, Inc.
 '\"
 '\" See the file "license.terms" for information on usage and redistribution
 '\" of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 '\" 
-'\" SCCS: @(#) listbox.n 1.36 96/08/27 13:21:36
+'\" SCCS: @(#) listbox.n 1.38 97/10/31 12:58:47
 '\" 
 .so man.macros
-.TH listbox n "" Tk "Tk Built-In Commands"
+.TH listbox n 8.0 Tk "Tk Built-In Commands"
 .BS
 '\" Note:  do not modify the .SH NAME line immediately below!
 .SH NAME
 listbox \- Create and manipulate listbox widgets
 .SH SYNOPSIS
-\fBlistbox\fI \fIpathName \fR?\fIoptions\fR?
+\fBlistbox\fR \fIpathName \fR?\fIoptions\fR?
 .SO
 \-background	\-foreground	\-relief	\-takefocus
 \-borderwidth	\-height	\-selectbackground	\-width
@@ -96,8 +96,11 @@ Indicates the anchor point for the selection, which is set with the
 .TP 12
 \fBend\fR
 Indicates the end of the listbox.
-For some commands this means just after the last element;
-for other commands it means the last element.
+.VS 8.0
+For most commands this refers to the last element in the listbox,
+but for a few commands such as \fBindex\fR and \fBinsert\fR
+it refers to the element just after the last one.
+.VE
 .TP 12
 \fB@\fIx\fB,\fIy\fR
 Indicates the element that covers the point in the listbox window
@@ -124,6 +127,10 @@ commands are possible for listbox widgets:
 .TP
 \fIpathName \fBactivate\fR \fIindex\fR
 Sets the active element to the one indicated by \fIindex\fR.
+.VS 8.0
+If \fIindex\fR is outside the range of elements in the listbox
+then the closest element is activated.
+.VE
 The active element is drawn with an underline when the widget
 has the input focus, and its index may be retrieved with the
 index \fBactive\fR.
@@ -136,7 +143,11 @@ of the upper-left corner of the screen area covered by the text
 (specified in pixels relative to the widget) and the last two
 elements give the width and height of the area, in pixels.
 If no part of the element given by \fIindex\fR is visible on the
-screen then the result is an empty string;  if the element is
+screen,
+.VS 8.0
+or if \fIindex\fR refers to a non-existent element,
+.VE
+then the result is an empty string;  if the element is
 partially visible, the result gives the full area of the element,
 including any parts that are not visible.
 .TP
@@ -174,7 +185,10 @@ to delete.  If \fIlast\fR isn't specified it defaults to
 .TP
 \fIpathName \fBget \fIfirst\fR ?\fIlast\fR?
 If \fIlast\fR is omitted, returns the contents of the listbox
-element indicated by \fIfirst\fR.
+element indicated by \fIfirst\fR,
+.VS 8.0
+or an empty string if \fIfirst\fR refers to a non-existent element.
+.VE
 If \fIlast\fR is specified, the command returns a list whose elements
 are all of the listbox elements between \fIfirst\fR and \fIlast\fR,
 inclusive.
@@ -182,8 +196,11 @@ Both \fIfirst\fR and \fIlast\fR may have any of the standard
 forms for indices.
 .TP
 \fIpathName \fBindex \fIindex\fR
-Returns a decimal string giving the integer index value that
-corresponds to \fIindex\fR.
+Returns the integer index value that corresponds to \fIindex\fR.
+.VS 8.0
+If \fIindex\fR is \fBend\fR the return value is a count of the number
+of elements in the listbox (not the index of the last element).
+.VE
 .TP
 \fIpathName \fBinsert \fIindex \fR?\fIelement element ...\fR?
 Inserts zero or more new elements in the list just before the
@@ -232,6 +249,10 @@ has several forms, depending on \fIoption\fR:
 .TP
 \fIpathName \fBselection anchor \fIindex\fR
 Sets the selection anchor to the element given by \fIindex\fR.
+.VS 8.0
+If \fIindex\fR refers to a non-existent element, then the closest
+element is used.
+.VE
 The selection anchor is the end of the selection that is fixed
 while dragging out a selection with the mouse.
 The index \fBanchor\fR may be used to refer to the anchor

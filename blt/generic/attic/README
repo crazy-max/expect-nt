@@ -1,0 +1,8 @@
+====================
+generic/attic/README
+====================
+
+This directory contains code which is now obsolete, as recent versions
+of Tcl/Tk provide the same or similar functionality: "blt_bell" was
+replaced by Tk's "bell" command, and "blt_cutbuffer" is now available
+as the "clipboard" family of commands.

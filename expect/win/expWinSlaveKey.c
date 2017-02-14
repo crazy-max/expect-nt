@@ -153,33 +153,43 @@ EXP_KEY ExpAsciiToKeyArray[256] = {
 /* 124 */ {220, 220, SHIFT_PRESSED},
 /* 125 */ {221, 221, SHIFT_PRESSED},
 /* 126 */ {192, 192, SHIFT_PRESSED},
+#if 0
 /* 127 */ {  8,  14, RIGHT_CTRL_PRESSED},
+#else
+/* Delete */ { VK_DELETE, 83, 0},
+#endif
 };
 
-/*
- * Also of interest
- *
- * LShift:  { 16,  42, 0}
- * RShift:  { 16,  54, 0}
- * Control: { 17,  29, 0}
- * Alt:     { 18,  56, 0}
- * LWin95:  { 91,  91, 0}
- * RWin95:  { 92,  92, 0}
- * WinPopup:{ 93,  93, 0}
- * Tab:     {  9,  15, 0}
- * CapsLock { 20,  58, 0}
- * ESC:     { 27,   1, 0}
- * F1:      {112,  59, 0}
- * F2:      {113,  60, 0}
- * F3:      {114,  61, 0}
- * F4:      {115,  62, 0}
- * F5:      {116,  63, 0}
- * F6:      {117,  64, 0}
- * F7:      {118,  65, 0}
- * F8:      {119,  66, 0}
- * F9:      {120,  67, 0}
- * F10:     {121,  68, 0}
- * F11:     {122,  87, 0}
- * F12:     {123,  88, 0}
- */
-
+EXP_KEY ExpFunctionToKeyArray[] = {
+    /* Cursor Up */	{ VK_UP,      72, 0},
+    /* Cursor Down */	{ VK_DOWN,    80, 0},
+    /* Cursor Right */	{ VK_RIGHT,   77, 0},
+    /* Cursor Left */	{ VK_LEFT,    75, 0},
+    /* End */		{ VK_END,     79, 0},
+    /* Home */		{ VK_HOME,    71, 0},
+    /* PageUp */	{ VK_PRIOR,   73, 0},
+    /* PageDown */	{ VK_NEXT,    81, 0},
+    /* Insert */	{ VK_INSERT,  82, 0},
+    /* Delete */	{ VK_DELETE,  83, 0},
+    /* Select */	{ VK_SELECT,   0, 0},
+    /* F1 */		{ VK_F1,      59, 0},
+    /* F2 */		{ VK_F2,      60, 0},
+    /* F3 */		{ VK_F3,      61, 0},
+    /* F4 */		{ VK_F4,      62, 0},
+    /* F5 */		{ VK_F5,      63, 0},
+    /* F6 */		{ VK_F6,      64, 0},
+    /* F7 */		{ VK_F7,      65, 0},
+    /* F8 */		{ VK_F8,      66, 0},
+    /* F9 */		{ VK_F9,      67, 0},
+    /* F10 */		{ VK_F10,     68, 0},
+    /* F11 */		{ VK_F11,     87, 0},
+    /* F12 */		{ VK_F12,     88, 0},
+    /* F13 */		{ VK_F13,      0, 0},
+    /* F14 */		{ VK_F14,      0, 0},
+    /* F15 */		{ VK_F15,      0, 0},
+    /* F16 */		{ VK_F16,      0, 0},
+    /* F17 */		{ VK_F17,      0, 0},
+    /* F18 */		{ VK_F18,      0, 0},
+    /* F19 */		{ VK_F19,      0, 0},
+    /* F20 */		{ VK_F20,      0, 0},
+};

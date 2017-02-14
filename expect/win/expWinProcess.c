@@ -549,6 +549,7 @@ ExpCreateProcess(argc, argv, inputHandle, outputHandle, errorHandle,
     BOOL b;
 
     result = 0;
+    /* XXX: This isn't quite right */
     applType = ExpApplicationType(argv[0], execPath, imagePath);
     if (applType == EXP_APPL_NONE) {
 	return GetLastError();
@@ -694,9 +695,6 @@ ExpCreateProcess(argc, argv, inputHandle, outputHandle, errorHandle,
 	    createFlags, NULL, NULL, &startInfo, &procInfo);
     if (! b) {
 	result = GetLastError();
-    }
-
-    if (! b) {
 	goto end;
     }
 

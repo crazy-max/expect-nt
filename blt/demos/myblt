@@ -1,0 +1,60 @@
+#!/bin/sh
+################################################################################
+#
+# ./demos/myblt
+#
+# This is a simple wrapper script which runs "bltwish" with the given args.
+# It only works if called from BLT's "demos/" directory, and assumes that you
+# configured and built BLT in the directory "demos/../unix/`uname -s`/" or in
+# the directory "demos/../../`uname -s`/". If this is not the case for your
+# particular setup, please set the environment variable BLT_CONFDIR to the
+# absolute path name of the directory in which you configured and built BLT.
+# Note that you don't need to install Tcl, Tk or BLT to run "bltwish"; this
+# script shows you how this works.
+#
+# Created on 23FEB97 by Michael Schumacher (mike@hightec.saarlink.de)
+#
+################################################################################
+
+BLT_DEMOS=`pwd`
+if [ "x$BLT_CONFDIR" = "x" ]
+then
+  BLT_CONFDIR=`uname -s`
+  if [ -x ../../$BLT_CONFDIR/bltwish ]
+  then
+    BLT_CONFDIR=../../$BLT_CONFDIR 
+  elif [ -x ../unix/$BLT_CONFDIR/bltwish ]
+  then
+    BLT_CONFDIR=../unix/$BLT_CONFDIR
+  else
+    echo "Fatal: Can't find an executable bltwish in ../unix/$BLT_CONFDIR."
+    echo "Please set the environment variable BLT_CONFDIR to the absolute path"
+    echo "of your actual BLT configuration directory. See $0 for details."
+    exit 1
+  fi
+else
+  if [ ! -x $BLT_CONFDIR/bltwish ]
+  then
+    echo "Fatal: Can't find an executable named $BLT_CONFDIR/bltwish."
+    echo "You probably specified a wrong value for the environment variable"
+    echo "BLT_CONFDIR; please set it to the absolute path of your actual BLT"
+    echo "configuration directory. See $0 for details."
+    exit 1
+  fi
+fi
+
+. $BLT_CONFDIR/config.BLT
+TCL_LIBRARY=$TCLINCDIR/../library
+TK_LIBRARY=$TKINCDIR/../library
+BLT_LIBRARY=$BLT_DEMOS/../library
+LD_LIBRARY_PATH=$TCLLIBDIR:$TKLIBDIR:$LD_LIBRARY_PATH
+LIBPATH=$TCLLIBDIR:$TKLIBDIR:$LIBPATH
+export TCL_LIBRARY TK_LIBRARY BLT_LIBRARY LD_LIBRARY_PATH LIBPATH
+# special debug hack: "myblt -d" starts "gdb bltwish $*"
+if [ "$1" = "-d" ]
+then
+  shift
+  exec gdb $BLT_CONFDIR/bltwish $*
+else
+  exec $BLT_CONFDIR/bltwish $*
+fi

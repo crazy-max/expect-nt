@@ -2,7 +2,7 @@ This file summarizes all changes made to Tk since version 1.0 was
 released on March 13, 1991.  Changes that aren't backward compatible
 are marked specially.
 
-SCCS: @(#) changes 1.215 97/08/13 17:47:45
+SCCS: @(#) changes 1.252 97/11/25 08:31:19
 
 3/16/91 (bug fix) Modified tkWindow.c to remove Tk's Tcl commands from
 the interpreter when the main window is deleted (otherwise there will
@@ -3973,10 +3973,157 @@ cosmetic problem with tearoff menus. (SRP)
 "imageName read" commands for GIF images, which didn't used to work
 correctly.  Also made transparency work correctly for GIF images
 without the TRANSPARENT_GIF_COLOR hack; TRANSPARENT_GIF_COLOR is
-now ignored.  These fixes were providing by Jan Nijtmans. (JO)
+now ignored.  These fixes were provided by Jan Nijtmans. (JO)
 
-13/8/97 (new feature) added safe::loadTk command to load Tk in a
+8/13/97 (new feature) added safe::loadTk command to load Tk in a
 safe slave interpreter. See the loadTk.n manual page for more
 details. (DL)
 
 ----------------- Released 8.0, 8/18/97 -----------------------
+
+8/22/97 - (bug fix) Fixed syntax error in tk_popup; option menus now
+popup over their selected items like they did in tk4.2. Fixed problem
+where cascades sometimes did not work on X. On X, menubars with
+checkbuttons and radiobuttons in them would infinite loop when
+mappped. (SRP)
+
+8/27/97 (new feature) Added support for new X11R6 colors under Windows
+and Mac platforms. (SS)
+
+8/29/97 (bug fix) Wish crashed if stdin was closed. (SS)
+
+9/10/97 (bug fix) "font actual {helvetica 10} -displayof ." wasn't taking
+into account the "-displayof" option.  This problem also existed for the
+"font metrics" and "font measure" commands. (CCS)
+
+9/16/97 (new feature) Added "resource delete" and "resource files"
+command to the Mac.  Also fixed "resource write" when the resource
+was specified by id and already existed. (JI)
+
+9/16/97 (bug fix) Added null bindings to <Command-KeyPress> for the
+text and entry widget on the Macintosh.  This prevents unbound command
+key sequences from having the character echoed to the widget. Also
+fixed Cut & Copy bindings.  (JI) (RJ)
+
+9/18/97 (bug fix) Revamped Macintosh focus code.  Cut, Copy & Paste
+virtual events now go to the correct (focus) window. (RJ)
+
+9/19/97 (bug fix) Made Macintosh tearoff menus non-resizable. (RJ)
+
+10/9/97 (bug fix) Image code could cause crashes during "exit" under
+some conditions (such as an image named "place").  (JO)
+
+10/9/97 (bug fix) Fixed bug that sometimes prevented listboxes from
+scrolling far enough horizontally to see the rightmost character.  (JO)
+
+10/9/97 (bug fix) Default font for new canvas text items was hardcoded to
+"Helvetica 12" instead of using DEF_CANVTEXT_FONT defined in
+tk{platform}Default.h like all the other widget settings.  (CCS)
+
+10/10/97 (bug fix) In canvas text items, if the text ended with a \n, it
+was not counted in the bbox height, as it did in tk4.2.  This caused
+"hello\n" to be the same height as "hello" and you couldn't see the
+cursor positioned on the next line. (CCS)
+
+10/10/97 (bug fix) The grid geometry manager didn't always properly
+forget about windows after a "grid forget" or "grid remove" command:
+the windows could reappear on the screen later.  (JO)
+
+10/13/97 (bug fix) Selection could not be restored to a text widget
+after "selection clear" on Windows. (SS)
+
+10/14/97 (bug fix) If a canvas had contained windows that were off-screen,
+the windows could sometimes reappear (in the wrong place) if the canvas was
+enlarged.  (JO)
+
+10/20/97 (bug fix) Omitting the arguments to the text widget "mark
+gravity" option caused a crash. (SS)
+
+10/21/97 (bug fix) Tk did not reset the result after native dialog
+modal loops on Window so background events could perturb the dialog
+result. (SS)
+
+10/23/97 (bug fix) Memory leak in unix's TkpGetFontFamilies.  Thanks
+to James Bonfield for the fix. (DL)
+
+10/27/97 (bug fix) Fixed event reporting for the Mac during a grab
+when the pointer was out of the toplevel window. (RJ)
+
+10/28/97 (bug fix) Under Unix, override-redirect was getting set
+incorrectly for menus, so that "wm overrideredirect" returned 0. (JO)
+
+10/28/97 (bug fix) Under Unix, focus code could sometimes cause the
+display to deadlock (it wasn't flushing the output buffer after issuing
+an ungrab command). (JO)
+
+10/28/97 (bug fix) If a PPM image file wasn't complete (e.g. it
+consisted of nothing but space characters) Tk entered an infinite loop
+reading the header. (JO)
+
+10/28/97 (bug fixes) On the Mac, menubars assigned to toplevels would
+disappear after a menu item was invoked from them. On Windows,
+clicking a system menu with added items and then again with a
+different set of added items would crash. On all platforms, a command
+menu entry that caused the entry to be deleted, another one created in
+its place, and the replacement deleted would cause a panic. On Unix,
+<<MenuSelect>> event bindings were firing every time the mouse moved,
+instead of everytime the active menu item changed. (SRP)
+
+10/27/97 (bug fix) If a particular race condition occurred under Windows,
+Tk would crash complaining about trying to free a color that wasn't 
+allocated. (SS)
+
+10/28/97 (bug fix) Under Windows, button grabs did not report motion 
+events that occurred outside of Tk windows. (SS)
+
+10/28/97 (bug fix) Fixed incorrect display of transparent images on
+the Macintosh. (JI)
+
+10/29/97 (bug fix) Reworked the handling of out-of-range indices in
+the widget command for listboxes: there were all sorts of quirks
+before (e.g., ".l delete -1" actually deleted the first element
+of the listbox). (JO)
+
+10/29/97 (bug fix) Fixed crash on the Macintosh that could occur if a
+window is moved before it is mapped where the X window was created but
+the Macintosh port was not. (RJ)
+
+10/29/97 (bug fix) Fixed several errors in how wm state was maintained
+on the Macintosh.  Tk now also will iconify a toplevel window on the
+Mac if the new Appearance Manager is present. (RJ)
+
+10/28/97 (bug fixes) In canvas' postscript command: User name 
+information was leaked in safe interpreters on Unix (security fix).
+Errors while reading prolog.ps were not propagated and the error 
+message was mixed with partial data. Note: postscript output does
+not work in safe interpreters on unix and windows. (DL)
+
+10/28/97 (bug fix) Safe Tk interps on unix were leaking env(DISPLAY). (DL)
+
+10/31/97 (bug fix) Fixed problems related to the input focus when one
+application had windows open simultaneously on several displays. (JO)
+
+10/31/97 (bug fix) Fixed several problems with traversal of menus via
+the keyboard under Unix. (SRP)
+
+11/4/97 (bug fix) Fixed various word-size related problems for 64-bit
+architectures. (SS)
+
+11/5/97 (bug fix) Embedding on Windows was using freed data (crashing
+in safe.test with TCL_MEM_DEBUG). NB: Embedding is still not fully 
+implemented on Windows ! (It works mostly when Tk is embeded into it's
+own Tk frame (safe::loadTk case), but not well with respect to resizing
+with a toplevel container or with an external process). (DL)
+
+----------------- Released 8.0p1, 11/7/97 -----------------------
+
+11/20/97 (bug fix) Fixed bug on the Mac where the "package require"
+command caused menus to stop working. (JI)
+
+11/20/97 (bug fix) Fixed bug in rendering transparent gifs on Text
+widgets. (JI)
+
+11/20/97 (enhancement) Made the changes required to work with the new
+Apple Universal Headers V. 3.0 so we can compile with CW Pro 2.0 (JI)
+
+----------------- Released 8.0p2, 11/25/97 -----------------------

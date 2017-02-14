@@ -4,6 +4,9 @@
 #
 # SCCS: @(#) all 1.8 97/08/01 11:07:14
 
+#package require expect
+load expect52.dll
+
 if {$tcl_platform(os) == "Win32s"} {
     set files [glob *.tes]
 } else {

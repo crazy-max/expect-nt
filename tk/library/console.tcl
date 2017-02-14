@@ -4,9 +4,9 @@
 # can be used by non-unix systems that do not have built-in support
 # for shells.
 #
-# SCCS: @(#) console.tcl 1.44 97/06/20 14:10:12
+# SCCS: @(#) console.tcl 1.45 97/09/17 16:52:40
 #
-# Copyright (c) 1995-1996 Sun Microsystems, Inc.
+# Copyright (c) 1995-1997 Sun Microsystems, Inc.
 #
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -375,14 +375,17 @@ proc tkConsoleBind {win} {
 	}
     }
     bind $win <<Cut>> {
-        continue
+        # Same as the copy event
+ 	if {![catch {set data [%W get sel.first sel.last]}]} {
+	    clipboard clear -displayof %W
+	    clipboard append -displayof %W $data
+	}
+	break
     }
     bind $win <<Copy>> {
-	if {[selection own -displayof %W] == "%W"} {
+ 	if {![catch {set data [%W get sel.first sel.last]}]} {
 	    clipboard clear -displayof %W
-	    catch {
-		clipboard append -displayof %W [selection get -displayof %W]
-	    }
+	    clipboard append -displayof %W $data
 	}
 	break
     }

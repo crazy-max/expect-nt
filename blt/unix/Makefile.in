@@ -1,0 +1,145 @@
+# ------------------------------------------------------------------------
+#       Makefile for demonstration shell of BLT library
+# ------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------
+#       C Compiler options 
+# ------------------------------------------------------------------------
+
+DEFINES      = 
+CFLAGS       = @CFLAGS@ @GCCFLAGS@
+CC 	     = @CC@
+
+TOPDIR	     = @DESTDIR@
+BINDIR       = @BINDIR@
+INCDIR	     = @INCDIR@
+
+# ------------------------------------------------------------------------
+#       Include directives for Tcl, Tk, and X include files 
+# ------------------------------------------------------------------------
+
+INCLUDES     = -I. @TCLINCSW@ @TKINCSW@ @XINCSW@ @TCLINCSW@/../unix \
+	       @TKINCSW@/../unix -I${srcdir}/../generic
+
+# ------------------------------------------------------------------------
+#       Libraries directives for Tcl, Tk, X11, and BLT
+# ------------------------------------------------------------------------
+
+STD_LIBS     = @TKLIBSW@ @TCLLIBSW@ @XLIBSW@ @SHLIB_LIBS@
+INCR_LIBS    = @ITKLIBSW@ @ITCLLIBSW@
+EXTRA_LIBS   = @LIBS@ 
+
+LIBDIR       = @LIBDIR@
+XLIBDIR      = @XLIBDIR@
+TCLLIBDIR    = @TCLLIBDIR@
+TKLIBDIR     = @TKLIBDIR@
+
+LIBRARIES    = ./objs/libBLT@BLT_LIBVERSION@.a $(INCR_LIBS) $(STD_LIBS) \
+		 $(EXTRA_LIBS)
+LIB_RUNTIME_DIR = @LIBDIR@/shared
+
+# ------------------------------------------------------------------------
+#       Don't edit anything beyond this point
+# ------------------------------------------------------------------------
+
+demo 	     = bltwish
+HEADERS	     = @srcdir@/../generic/blt.h
+
+CC_SWITCHES  = $(CFLAGS) $(DEFINES) $(INCLUDES)
+LD_FLAGS     = @LDFLAGS@ @SHLIB_EXTRA_FLAGS@
+INSTALL      = @INSTALL@
+RANLIB 	     = @RANLIB@
+SHELL 	     = /bin/sh
+RM 	     = rm -f
+srcdir	     = @srcdir@
+
+all: lib-static $(demo) @SHLIB_TARGET@ 
+	@echo "make finished on `date`"
+
+$(demo): bltAppInit.o ./objs/libBLT@BLT_LIBVERSION@.a
+	@echo "making BLT demo \"$(demo)\"..."
+	$(RM) $(demo)
+	$(CC) bltAppInit.o -o $(demo) $(LD_FLAGS) $(LIBRARIES) 
+
+bltAppInit.o: $(srcdir)/bltAppInit.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltAppInit.c
+
+libs: lib-static lib-shared
+shared: lib-shared
+
+lib-static:
+	@echo "making all in ./objs"
+	@(cd objs; $(MAKE) CFLAGS="$(CFLAGS)" all)
+
+lib-shared: 
+	@echo "making shared library in ./objs/shared"
+	@(cd objs/shared; $(MAKE) CFLAGS="$(CFLAGS)" all)
+
+
+install: install-top install-library \
+	install-bin install-lib install-doc install-include
+
+install-top:
+	@srcdir@/cf/mkinstalldirs $(TOPDIR)
+
+install-bin: $(demo)
+	@srcdir@/cf/mkinstalldirs $(BINDIR)
+	$(INSTALL) $(demo) $(BINDIR)/$(demo)
+	chmod 0755 $(BINDIR)/$(demo)
+	-strip $(BINDIR)/$(demo)
+
+install-doc: 
+	@(cd doc; $(MAKE) install)
+
+install-include:
+	@srcdir@/cf/mkinstalldirs $(INCDIR)
+	chmod 0444 $(HEADERS)
+	$(INSTALL) $(HEADERS) $(INCDIR)
+
+install-lib:
+	@(cd objs; $(MAKE) install)
+	@(cd objs/shared; $(MAKE) install)
+
+install-library:
+	@(cd library; $(MAKE) install)
+
+
+clean:
+	@echo "cleaning in ./objs"
+	@(cd objs; $(MAKE) clean)
+	@echo "cleaning in ./objs/shared"
+	@(cd objs/shared; $(MAKE) clean)
+	@echo "cleaning in ./doc"
+	@(cd doc; $(MAKE) clean)
+	@echo "cleaning in ./library"
+	@(cd library; $(MAKE) clean)
+	@echo "cleaning in @srcdir@/../demos"
+	@(cd @srcdir@/../demos; $(RM) *.bak *\~ "#"* )
+	$(RM) $(demo) bltAppInit.o *.bak *\~ "#"* *pure* .pure*
+
+.c.o:
+	$(CC) -c $(CC_SWITCHES) $<
+
+GENERATED_FILES = \
+	config.status config.cache config.log \
+	config.BLT objs/bltConfig.h \
+	Makefile \
+	objs/Makefile \
+	objs/TAGS \
+	objs/shared/Makefile \
+	doc/Makefile \
+	library/Makefile \
+	@srcdir@/../demos/*.ps
+
+distclean: clean
+	$(RM) $(GENERATED_FILES)
+
+PUREFLAGS=
+pure: lib-static
+	$(PURIFYHOME)/purify $(PUREFLAGS) \
+	$(CC) $(CC_SWITCHES) $(srcdir)/bltAppInit.c -o $(demo) $(LIBRARIES)
+
+QUANTIFYFLAGS=
+profile: lib-static
+	$(QUANTIFYHOME)/quantify $(QUANTIFYFLAGS) \
+	$(CC) $(CC_SWITCHES) $(srcdir)/bltAppInit.c -o $(demo) $(LIBRARIES)

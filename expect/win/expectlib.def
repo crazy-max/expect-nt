@@ -22,6 +22,7 @@ EXPORTS
 	exp_perror
 	exp_strerror
 	exp_setblocking
+	exp_setdebug
 
 	; Global variables
 	exp_pid

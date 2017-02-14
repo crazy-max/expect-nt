@@ -869,6 +869,10 @@ ecases_remove_by_expi(interp,ecmd,exp_i)
 		       sizeof(struct exp_cmd_descriptor *));
 	    }
 	    ecmd->ecd.count--;
+	    if (0 == ecmd->ecd.count) {
+		ckfree((char *)ecmd->ecd.cases);
+		ecmd->ecd.cases = 0;
+	    }
 	} else {
 	    i++;
 	}

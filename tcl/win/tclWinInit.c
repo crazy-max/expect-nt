@@ -123,6 +123,7 @@ static char *initScript =
     }\n\
     lappend dirs [file join [file dirname [file dirname [file dirname [pwd]]]] $lib/library]\n\
     lappend dirs [file join [file dirname [file dirname [pwd]]] $lib/library]\n\
+    lappend dirs [file join [file dirname [pwd]] $lib/library]\n\
     lappend dirs [file join [file dirname [pwd]] library]\n\
     foreach i $dirs {\n\
 	set tcl_library $i\n\

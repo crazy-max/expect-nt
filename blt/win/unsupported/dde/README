@@ -1,0 +1,102 @@
+DDE based send for Wish under Windows
+-------------------------------------
+(c)1996 Sun MicroSystems Labs
+Ken Corey (kcorey@eng.sun.com)
+
+I. What is it?
+
+  This .dll provides basic dde and send functionality for Tcl 7.6/Tk 4.2 
+  under windows. Source code is provided so that (hopefully) one could
+  recompile for another version of tk or with some other compiler than
+  Borland C++ 4.5.
+
+  NOTE: This is alpha or pre-alpha quality software.  It may work, it
+  may puke.  It may turn your computer green.  No warranty is provided.
+  If you die using it, tough. YMMV, it works for me, on my machine, if
+  the sun is in partial eclipse by the moon.
+
+  FWIW, I now use this to run tkinspect-5 and SpecTcl for debugging purposes
+  under windows.  If you're trying to write a large Tcl program without 
+  this fantastic diagnostic tool....why?
+
+II. Why distribute it if you're not sure if it's good quality?
+
+  Because someone, somewhere might get some use out of it.  Please do not
+  hold this program or the code to the same high standards that 
+  Sun's products are normally expected to acheive.
+
+  I won't have a chance to work on this, though it needs it desperately.
+  If you're a windows hacker, and can fix my egregious errors, please
+  mail me the fixes so that they get out.
+
+III. Installation
+  
+  Copy the dde.dll file into the same directory as wish. 
+
+  From then on, any scripts that you want to see or be seen via
+  dde must execute a 'load dde'.  It's best to do this explicitly
+  at the start of execution rather than using autoloading, because
+  the dde server portion of the library needs to be running at
+  all times for other applications (wish or otherwise) to talk
+  to your app.
+
+III. What *exactly* does it do?
+
+  This .dll performs several tasks on startup:
+    Renames the winfo, tk, load and interp commands to 
+      "command"_no_dde, and wraps them with small functions to
+      trap critical behaviors.
+    Provides the extra functionality needed by these commands
+      to support the 'send' functionality available under unix.
+    Provides the 'dde' command, and implements 'send' using it.
+    Provides the basic DDE support topics and responds to queries.
+
+  Service (sometimes called 'AppName' in Microsoft documentation) :
+    TCL
+
+  Topics supported:
+    System
+    Topics
+    <wish_interpreter_id>
+
+  Trapped Tcl/Tk commands:
+    winfo interps
+    interp create
+    load {} Tk
+    tk appname
+
+    These should all now function as their unix counterparts.
+
+  If the variable dde_verbosity is present some debugging output
+    will be shown.  The higher the number given, the more output.
+    It's interesting to see this stuff when debugging, but in
+    practical use, it's not useful.
+
+IV. What does the 'dde' command do?
+
+  dde get ?-convinfo? <Service> <Topic> <Item>
+    This returns the results of the dde REQUEST as a Tcl
+    list.
+
+  dde exec ?-asynch? <Service> <Topic> <command>
+    This passes the 'command' to "Service|Topic"'s dde EXECUTE
+    message. The result and the result string are returned if
+    the call is made synchronously.
+    NOTE: '-asynch' doesn't work right now, and may never work.
+    don't bother using it.
+
+V. What does 'send' do?
+
+  Refer to the 'send' man page. Behavior should be the same, with
+  the exception that there's *no* security.  Since there's no notion
+  of opening a window on another user's display I don't think this
+  is a big deal.
+
+VI. Limitations?
+
+  Several limitations exist:
+    The '-async' flag doesn't work, and actually makes send not work.
+    Warm / Hot links to variables don't yet exist.
+    The full set of Microsoft-recommended Topics are not supported yet.
+    I'm pretty sure there's major memory leaks here.  *sigh*
+

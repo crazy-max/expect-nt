@@ -9,7 +9,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclWinFCmd.c 1.19 97/08/05 15:23:47
+ * SCCS: @(#) tclWinFCmd.c 1.20 97/10/10 11:50:14
  */
 
 #include "tclWinInt.h"
@@ -1143,21 +1143,20 @@ ConvertFileNameFormat(
     Tcl_SplitPath(fileName, &pathArgc, &pathArgv);
     newPathArgv = (char **) ckalloc(pathArgc * sizeof(char *));
 
-    for (i = 0; i < pathArgc; i++) {
+    i = 0;
+    if ((pathArgv[0][0] == '/') 
+	    || ((strlen(pathArgv[0]) == 3) && (pathArgv[0][1] == ':'))) {
+	newPathArgv[0] = (char *) ckalloc(strlen(pathArgv[0]) + 1);
+	strcpy(newPathArgv[0], pathArgv[0]);
+	i = 1;
+    } 
+    for ( ; i < pathArgc; i++) {
 	if (strcmp(pathArgv[i], ".") == 0) {
-	    currentElement = ckalloc(strlen(".") + 1);
+	    currentElement = ckalloc(2);
 	    strcpy(currentElement, ".");
 	} else if (strcmp(pathArgv[i], "..") == 0) {
-	    currentElement = ckalloc(strlen("..") + 1);
+	    currentElement = ckalloc(3);
 	    strcpy(currentElement, "..");
-	} else if ((i == 0) && (pathArgv[i][1] == ':') 
-		&& (strlen(pathArgv[i]) == 3)) {
-	    currentElement = ckalloc(4);
-	    strcpy(currentElement, pathArgv[i]);
-	} else if ((i == 0) && (pathArgv[i][0] == '/')
-		&& (pathArgv[i][1] == '/')) {
-	    currentElement = ckalloc(strlen(pathArgv[i]) + 1);
-	    strcpy(currentElement, pathArgv[i]);
 	} else {
 	    int useLong;
 

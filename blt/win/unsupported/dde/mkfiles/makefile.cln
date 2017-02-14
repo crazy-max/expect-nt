@@ -1,0 +1,14 @@
+clean:
+	@-$(RM) $(DLL_RES) $(DLL_DEF)
+	@-$(RM) $(OBJDIR)\*.map $(OBJDIR)\*.exe $(OBJDIR)\*.lib
+	@-$(RM) $(OBJDIR)\*.exp $(OBJDIR)\*.dll $(OBJDIR)\*.map
+	@-$(RM) $(OBJDIR)\*.def $(OBJDIR)\*.pdb $(OBJDIR)\*.i
+	@-$(RM) $(OBJDIR)\*.obj
+	@-$(RM) $(OBJDIR)\*.ilk
+	@-$(RM) *.map *.exe *.lib
+	@-$(RM) *.exp *.dll *.map
+	@-$(RM) *.def *.pdb *.i
+	@-$(RM) $(DLL_PDB) $(DLL_ILK) $(CLEANFILES)
+
+xtraclean: clean
+	@-$(RM) $(DLL_LIB) $(DLL_DLL) $(DLL_RES) $(DLL_EXP) $(DLL_DEF)

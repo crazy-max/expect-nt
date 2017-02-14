@@ -3,7 +3,7 @@
 # Initialization script normally executed in the interpreter for each
 # Tk-based application.  Arranges class bindings for widgets.
 #
-# SCCS: @(#) tk.tcl 1.97 97/06/13 14:57:46
+# SCCS: @(#) tk.tcl 1.98 97/10/28 15:21:04
 #
 # Copyright (c) 1992-1994 The Regents of the University of California.
 # Copyright (c) 1994-1996 Sun Microsystems, Inc.
@@ -55,6 +55,8 @@ proc tkScreenChanged screen {
 	set tkPriv(screen) $screen
 	return
     }
+    set tkPriv(activeMenu) {}
+    set tkPriv(activeItem) {}
     set tkPriv(afterId) {}
     set tkPriv(buttons) 0
     set tkPriv(buttonWindow) {}

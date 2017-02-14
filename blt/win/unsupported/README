@@ -1,0 +1,44 @@
+======================
+win/unsupported/README
+======================
+
+This directory contains code which adds useful things to the Win32 port
+of BLT. The code was written by various authors who gracefully made it
+available to the Tcl community. Please note that I've only included this
+stuff for your convenience, but I'm not actively maintaining it; please
+contact the original author(s) if you have questions, complaints, etc.
+
+Here's a short description of the currently included packages:
+
+* dde
+  ---
+
+  This is Ken Corey's (kcorey@eng.sun.com) implementation of Tk's "send"
+  command based on the "dynamic data exchange" mechanism provided by MS
+  Windows. The "send" command is needed by BLT's "drag&drop" facilities.
+  Since this program is written in C, you'll most likely need to adjust
+  the makefile. Robin Becker (robin@jessikat.demon.co.uk) has modified
+  "dde.c" a bit, but the original file is still available as "dde.c.org".
+
+* comm
+  ----
+
+  This is a Tcl-only replacement of Tk's "send" command based on sockets;
+  it was written by John Robert LoVerso of OSF (loverso@osf.org). If you
+  need BLT's "drag&drop" facilities under Win32 and don't want to compile
+  Ken's "dde" package (or can't get it up and running), then "comm.tcl" is
+  your friend. You may probably want to replace the "if 0" statement with
+  "if 1", so that the "send" command will be defined and "winfo interps" be
+  replaced with "comm interps" automatically when you "source" this file.
+
+* tkbusy
+  ------
+
+  This Tcl script implements the command "tkbusy", which can be used
+  to disable widgets while an application is busy. It's by far not a
+  real replacement of BLT's "busy" command, but you may find it
+  useful nevertheless.
+
+
+Good luck & have fun,
+mike

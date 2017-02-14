@@ -129,8 +129,8 @@ main(int argc, char **argv)
 	exit(1);
     }
 
-    dwResult = ExpCreateProcess(argc-1, &argv[1], NULL, NULL, NULL,
-				FALSE, FALSE, TRUE, FALSE, &slavePid, &globalPid);
+    dwResult = ExpCreateProcess(argc-1, &argv[1], NULL, NULL, NULL, FALSE,
+				FALSE, TRUE, FALSE, &slavePid, &globalPid);
     if (dwResult) {
 	fprintf(stderr, "Unable to create process %s\n", argv[1]);
 	exit(1);

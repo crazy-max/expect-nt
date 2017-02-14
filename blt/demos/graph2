@@ -1,0 +1,113 @@
+#!/bin/sh ./myblt
+
+source bltDemo.tcl
+
+set graph .graph
+
+bitmap define pattern1 { {4 4} {01 02 04 08} }
+bitmap define pattern5 { {4 4} {01 01 01 01} }
+
+set visual [winfo screenvisual .]
+if { $visual != "staticgray" && $visual != "grayscale" } {
+    option add *Button.Background		red
+    option add *Graph.textMarkerForeground	black
+    option add *Graph.textMarkerBackground	yellow
+    option add *Graph.lineMarkerForeground	black
+    option add *Graph.lineMarkerBackground	yellow
+    option add *Graph.polyMarkerFill		""
+    option add *Graph.polyMarkerOutline		orange
+    option add *Graph.polyMarkerStipple		pattern5
+    option add *Graph.elemActiveColor		red4
+    option add *Graph.elemActiveFill		red
+}
+
+option add *HighlightThickness		0
+
+option add *Graph.elemScaleSymbols	true
+option add *Graph.elemPixels		1.75m
+option add *Graph.elemSymbol		circle
+
+#option add *Tile			bgTexture
+option add *Button.Tile			""
+
+image create photo bgTexture -file bitmaps/tan_paper.gif
+
+frame .frame
+htext .frame.msg -text {\
+You can zoom in on a particular area by clicking with the left button, 
+moving the pointer, and clicking again.  To restore the last view, 
+click on the right button.  
+Hit the %%
+	button $htext(widget).quit -text {Quit} -command {exit} 
+	$htext(widget) append $htext(widget).quit
+%% button when you've seen enough. %%
+	label $htext(widget).logo -bitmap BLT 
+	$htext(widget) append $htext(widget).logo
+%%}
+
+graph .graph -title "XY Graph"
+
+.graph xaxis configure \
+    -step 90 \
+    -command formatXLabels \
+    -subdivisions 0 \
+    -title "X Axis"
+
+.graph yaxis configure \
+    -rotate 90.0 \
+    -title "Y Axis" \
+
+#    -loose 1
+
+proc formatXLabels {graph x} {
+     return "[expr int($x)]\260"
+}
+
+table . \
+    .graph 0,0 -fill both  \
+    .frame 1,0 -fill both  
+
+table .frame .frame.msg -padx 20 
+
+table configure . r1 -resize none
+wm min . 0 0
+
+vector x sinx cosx
+
+.graph element create line1 \
+    -label sin(x) \
+    -fill blue -color blue4 \
+    -xdata x -ydata sinx
+
+.graph element create line2 \
+    -label cos(x) \
+    -color green4 -fill green \
+    -xdata x -ydata cosx
+
+.graph legend configure \
+    -position right \
+    -anchor ne \
+    -borderwidth 0 \
+    -activerelief raised \
+    -activeborderwidth 2 
+
+set w [expr 3.14159265358979323846/180.0]
+puts stderr "Generating data..."
+for { set i -360 } { $i <= 360 } { incr i 5 } {
+    set x(++end) $i 
+    set radians [expr $i*$w]
+    set sinx(++end) sin($radians)
+    set cosx(++end) cos($radians)
+}
+
+puts stderr "done."
+
+set fill [concat -360 -Inf [x merge sinx] 360 -Inf]
+.graph marker create polygon -coords $fill -under true
+
+Blt_ZoomStack $graph
+Blt_Crosshairs $graph
+Blt_ActiveLegend $graph
+Blt_ClosestPoint $graph
+Blt_PrintKey $graph
+

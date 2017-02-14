@@ -4,10 +4,10 @@
 '\" See the file "license.terms" for information on usage and redistribution
 '\" of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 '\" 
-'\" SCCS: @(#) FontId.3 1.2 96/07/31 14:08:33
+'\" SCCS: @(#) FontId.3 1.4 97/11/04 18:03:07
 '\" 
 .so man.macros
-.TH Tk_FontId 3 "" Tk "Tk Library Procedures"
+.TH Tk_FontId 3 8.0 Tk "Tk Library Procedures"
 .BS
 .SH NAME
 Tk_FontId, Tk_FontMetrics, Tk_PostscriptFontName \- accessor functions for 
@@ -67,6 +67,29 @@ following screen font families should print correctly:
 .PP
 Any other font families may not print correctly because the computed
 Postscript font name may be incorrect or not exist on the printer.
-
+.VS 8.0 br
+.SH DATA STRUCTURES
+The Tk_FontMetrics data structure is used by Tk_GetFontMetrics to return 
+information about a font and is defined as follows:
+.CS
+typedef struct Tk_FontMetrics {
+    int ascent;
+    int descent;
+    int linespace;
+} Tk_FontMetrics;
+.CE
+The \fIlinespace\fR field is the amount in pixels that the tallest
+letter sticks up above the baseline, plus any extra blank space added
+by the designer of the font.
+.PP
+The \fIdescent\fR is the largest amount in pixels that any letter
+sticks below the baseline, plus any extra blank space added by the
+designer of the font.
+.PP
+The \fIlinespace\fR is the sum of the ascent and descent.  How far
+apart two lines of text in the same font should be placed so that none
+of the characters in one line overlap any of the characters in the
+other line.
+.VE
 .SH KEYWORDS
 font

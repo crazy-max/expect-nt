@@ -1,0 +1,122 @@
+#!/bin/sh ./myblt
+
+source bltDemo.tcl
+
+if { ![string compare $tcl_platform(platform) unix] } {
+    image create photo bgTexture -file ./bitmaps/rain.gif
+    option add *Graph.Tile			bgTexture
+    option add *Label.Tile			bgTexture
+    option add *Frame.Tile			bgTexture
+    option add *Htext.Tile			bgTexture
+}
+option add *TileOffset			0
+option add *HighlightThickness		0
+option add *takeFocus			1
+
+option add *graph.elemActiveColor	yellow4
+option add *graph.elemActiveFill	yellow
+option add *graph.elemPixels		6 
+option add *graph.elemScaleSymbols	1
+
+set visual [winfo screenvisual .] 
+if { $visual != "staticgray" } {
+    option add *print.background yellow
+    option add *quit.background red
+}
+
+proc FormatLabel { w value } {
+    puts stderr "tick is $value"
+    return $value
+}
+
+frame .f 
+set remote {}
+set graph .graph
+htext .header -text {\
+This is an example of the graph widget.  It displays two-variable data 
+with assorted line attributes and symbols.  To create a postscript file 
+"xy.ps", press the %%
+    button $htext(widget).print -text print -command {
+        .graph postscript output xy.ps \
+	     -maxpect 1 -landscape 1 -center 1 -decorations 0
+    } 
+    $htext(widget) append $htext(widget).print
+%% button.}
+
+graph $graph -title "A Simple XY Graph" 
+$graph xaxis configure \
+	-loose 1 \
+	-title "X Axis Label" 
+$graph yaxis configure \
+	-title "Y Axis Label" 
+$graph legend configure \
+	-activerelief sunken \
+	-background ""
+
+htext .footer -text {Hit the %%
+button $htext(widget).quit -text quit -command { 
+    catch "send GraphConfig after 1 exit" 
+    exit
+} 
+$htext(widget) append $htext(widget).quit 
+%% button when you've seen enough.%%
+label $htext(widget).logo -bitmap BLT
+$htext(widget) append $htext(widget).logo -padx 20
+%%}
+
+vector X Y1 Y2 Y3
+X set { 
+    2.00000e-01 4.00000e-01 6.00000e-01 8.00000e-01 1.00000e+00 
+    1.20000e+00 1.40000e+00 1.60000e+00 1.80000e+00 2.00000e+00 
+    2.20000e+00 2.40000e+00 2.60000e+00 2.80000e+00 3.00000e+00 
+    3.20000e+00 3.40000e+00 3.60000e+00 3.80000e+00 4.00000e+00 
+    4.20000e+00 4.40000e+00 4.60000e+00 4.80000e+00 5.00000e+00 
+} 
+
+Y1 set { 
+    1.14471e+01 2.09373e+01 2.84608e+01 3.40080e+01 3.75691e+01 
+    3.91345e+01 3.92706e+01 3.93474e+01 3.94242e+01 3.95010e+01 
+    3.95778e+01 3.96545e+01 3.97313e+01 3.98081e+01 3.98849e+01 
+    3.99617e+01 4.00384e+01 4.01152e+01 4.01920e+01 4.02688e+01 
+    4.03455e+01 4.04223e+01 4.04990e+01 4.05758e+01 4.06526e+01 
+}
+
+Y2 set { 
+    2.61825e+01 5.04696e+01 7.28517e+01 9.33192e+01 1.11863e+02 
+    1.28473e+02 1.43140e+02 1.55854e+02 1.66606e+02 1.75386e+02 
+    1.82185e+02 1.86994e+02 1.89802e+02 1.90683e+02 1.91047e+02 
+    1.91411e+02 1.91775e+02 1.92139e+02 1.92503e+02 1.92867e+02 
+    1.93231e+02 1.93595e+02 1.93958e+02 1.94322e+02 1.94686e+02 
+}
+
+Y3 set  { 
+    4.07008e+01 7.95658e+01 1.16585e+02 1.51750e+02 1.85051e+02 
+    2.16479e+02 2.46024e+02 2.73676e+02 2.99427e+02 3.23267e+02 
+    3.45187e+02 3.65177e+02 3.83228e+02 3.99331e+02 4.13476e+02 
+    4.25655e+02 4.35856e+02 4.44073e+02 4.50294e+02 4.54512e+02 
+    4.56716e+02 4.57596e+02 4.58448e+02 4.59299e+02 4.60151e+02 
+}
+
+$graph element create line1 -xdata X -ydata Y2 \
+    -symbol circle -color red4 -fill red1
+$graph element create line2 -xdata X -ydata Y3 \
+    -symbol square -color purple4 -fill purple1
+$graph element create line3 -xdata X -ydata Y1 \
+    -symbol triangle -color green4 -fill green1
+
+table .f \
+    .header 0,0 -padx 20  \
+    .graph 1,0  \
+    .footer 2,0 -padx 20 
+
+table configure .f .header .graph .footer -fill both
+
+table . .f -fill both
+wm min . 0 0
+
+Blt_ZoomStack $graph
+Blt_Crosshairs $graph
+Blt_ActiveLegend $graph
+Blt_ClosestPoint $graph
+
+

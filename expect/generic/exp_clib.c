@@ -66,11 +66,44 @@ void debuglog();
 int getptymaster();
 int getptyslave();
 int Exp_StringMatch();
+int pid;
 
 static Tcl_Interp *InterpPtr = NULL;
 #define sysreturn(x)	return(errno = x, -1)
 
 static int bufsiz = 2*EXP_MATCH_MAX;
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * expectlib_init --
+ *
+ *	Make sure an interpreter exists.
+ *
+ * Results:
+ *	FALSE on failure, TRUE on success.
+ *
+ *----------------------------------------------------------------------
+ */
+static int
+expectlib_init()
+{
+#ifdef __WIN32__
+    pid = GetCurrentProcessId();
+#else
+    pid = getpid();
+#endif
+    if (InterpPtr == NULL) {
+	InterpPtr = Tcl_CreateInterp();
+	if (Expect_Init(InterpPtr) == TCL_ERROR) {
+	    /* XXX: This should really return some error value */
+	    fprintf(stderr, "Expect_Init failed: %s\n", InterpPtr->result);
+	    return FALSE;
+	}
+    }
+    return TRUE;
+}
+
 
 /*
  *----------------------------------------------------------------------
@@ -146,13 +179,8 @@ exp_spawnv(file,argv)
     int need;
     struct exp_f *f;
 
-    if (InterpPtr == NULL) {
-	InterpPtr = Tcl_CreateInterp();
-	if (Expect_Init(InterpPtr) == TCL_ERROR) {
-	    /* XXX: This should really return some error value */
-	    fprintf(stderr, "Expect_Init failed: %s\n", InterpPtr->result);
-	    return NULL;
-	}
+    if (!expectlib_init()) {
+	return NULL;
     }
 
 #ifdef __WIN32__
@@ -166,8 +194,8 @@ exp_spawnv(file,argv)
     }
 
     if (!argv[0] || strcmp(file,argv[0])) {
-	debuglog("expect: warning: file (%s) != argv[0] (%s)\n",
-		 file, argv[0]?argv[0]:"");
+	debuglog("expectlib(%d): warning: file (%s) != argv[0] (%s)\n",
+		 pid, file, argv[0]?argv[0]:"");
     }
     
     need = sizeof("spawn") + sizeof(char *);
@@ -177,7 +205,7 @@ exp_spawnv(file,argv)
 	cc++;
     }
 
-    nargv = (char **) malloc(need);
+    nargv = (char **) ckalloc(need);
     p = (char *) &nargv[cc+2];
     nargv[0] = p;
     memcpy(p, "spawn", sizeof("spawn"));
@@ -214,7 +242,7 @@ exp_spawnv(file,argv)
 	Tcl_GetChannelType(channel)->blockModeProc(
 	    Tcl_GetChannelInstanceData(channel), TCL_MODE_BLOCKING);
     }
-    free(nargv);
+    ckfree((char *) nargv);
     return (ExpHandle) channel;
 }
 
@@ -251,7 +279,7 @@ exp_spawnl TCL_VARARGS_DEF(char *,arg1)
 	errno = EINVAL;
 	return NULL;
     }
-    if (!(argv = (char **)malloc((i+1)*sizeof(char *)))) {
+    if (!(argv = (char **)ckalloc((i+1)*sizeof(char *)))) {
 	errno = ENOMEM;
 	return NULL;
     }
@@ -261,7 +289,7 @@ exp_spawnl TCL_VARARGS_DEF(char *,arg1)
 	if (!argv[i]) break;
     }
     handle = exp_spawnv(argv[0],argv+1);
-    free((char *)argv);
+    ckfree((char *)argv);
     return(handle);
 }
 
@@ -381,7 +409,6 @@ exp_expectv(handle,ecases)
 {
     int cc = 0;			/* number of chars returned in a single read */
     int buf_length;		/* numbers of chars in exp_buffer */
-    int old_length;		/* old buf_length */
     int first_time = TRUE;	/* force old buffer to be tested before */
 				/* additional reads */
     int polled = 0;		/* true if poll has caused read() to occur */
@@ -403,6 +430,7 @@ exp_expectv(handle,ecases)
 
     f = exp_chan2f(InterpPtr, Tcl_GetChannelName(channel),0,1,"");
     if (!f) return_errno(ENOMEM);
+    f->rm_nulls = exp_remove_nulls;
 
     if (!ecases) return_errno(EINVAL);
 
@@ -428,10 +456,9 @@ exp_expectv(handle,ecases)
 	 * and copy to beginning of buffer
 	 */
 	memmove(exp_buffer,exp_match_end,buf_length);
-	f->size = buf_length;
-	f->printed = buf_length;
-	f->buffer[f->size] = '\0';
     }			
+    f->size = buf_length;
+    f->printed = buf_length;
     exp_buffer_end = exp_buffer + buf_length;
     *exp_buffer_end = '\0';
 
@@ -450,6 +477,7 @@ exp_expectv(handle,ecases)
 	    /* triggering buffer-full handling code below */
 	    /* which will immediately dump the first half */
 	    /* of the buffer */
+	    debuglog("expectlib(%d): copy end of buffer down 1\r\n", pid);
 	    memmove(exp_buffer,exp_buffer+(buf_length - bufsiz)+1,
 		bufsiz-1);
 	    buf_length = bufsiz-1;
@@ -457,7 +485,7 @@ exp_expectv(handle,ecases)
 	    f->printed = bufsiz-1;
 	    f->buffer[f->size] = '\0';
 	}
-	exp_buffer = realloc(exp_buffer,bufsiz);
+	exp_buffer = ckrealloc(exp_buffer,bufsiz);
 	if (!exp_buffer) return_errno(ENOMEM);
 	exp_buffer[buf_length] = '\0';
 	exp_buffer_end = exp_buffer + buf_length;
@@ -476,11 +504,11 @@ restart:
     for (;;) {
 	/* when buffer fills, copy second half over first and */
 	/* continue, so we can do matches over multiple buffers */
-	if (buf_length == bufsiz) {
+	if (buf_length == bufsiz-1) {
 	    int first_half, second_half;
 
 	    if (exp_full_buffer) {
-		debuglog("expect: full buffer\r\n");
+		debuglog("expectlib(%d): full buffer\r\n", pid);
 		exp_match = exp_buffer;
 		exp_match_end = exp_buffer + buf_length;
 		exp_buffer_end = exp_match_end;
@@ -489,8 +517,9 @@ restart:
 	    first_half = bufsiz/2;
 	    second_half = bufsiz - first_half;
 
+	    debuglog("expectlib(%d): copy end of buffer down 2\r\n", pid);
 	    memmove(exp_buffer,exp_buffer+first_half,second_half);
-	    buf_length = second_half;
+	    buf_length = second_half-1;
 	    exp_buffer_end = exp_buffer + second_half;
 	    f->size = buf_length;
 	    f->printed = buf_length;
@@ -509,7 +538,7 @@ restart:
 	 * check for timeout
 	 */
 	if ((exp_timeout >= 0) && ((remtime < 0) || polled)) {
-	    debuglog("expect: timeout\r\n");
+	    debuglog("expectlib(%d): timeout\r\n", pid);
 	    exp_match_end = exp_buffer;
 	    return_normally(EXP_TIMEOUT);
 	}
@@ -525,26 +554,36 @@ restart:
 
 	cc = expect_read(InterpPtr,&f,1,&ignore,remtime,key);
 	if (cc == EXP_EOF) {
+	    debuglog("expectlib(%d): eof\r\n", pid);
 	    /* do nothing */
 	} else if (cc == EXP_TIMEOUT) {
-	    debuglog("expect: timed out\r\n");
+	    debuglog("expectlib(%d): timed out\r\n", pid);
 	} else if (cc == EXP_RECONFIGURE) {
 	    goto restart;
+	} else {
+	    debuglog("expectlib(%d): read %d bytes\n", pid, cc);
+	    exp_buffer[buf_length+cc] = 0;
+	    debuglog("expectlib(%d): read %s\n", pid,
+		     exp_printify(&exp_buffer[buf_length]));
+#if 0
+	    {
+		int i, n;
+		debuglog("\t");
+		n = cc > 10 ? 10 : cc;
+		for (i = 0; i < n; i++) {
+		    debuglog("%02x ", (unsigned char) exp_buffer[buf_length+i]);
+		}
+		debuglog("\n");
+	    }
+#endif
 	}
 	if (cc < 0) {
 	    return cc;
 	}
 
-	old_length = buf_length;
 	buf_length += cc;
 	exp_buffer_end += buf_length;
 
-	/* remove nulls from input, so we can use C-style strings */
-	/* doing it here lets them be sent to the screen, just */
-	/*  in case they are involved in formatting operations */
-	if (exp_remove_nulls) {
-	    buf_length -= rm_nulls(exp_buffer + old_length, cc);
-	}
 	/* cc should be decremented as well, but since it will not */
 	/* be used before being set again, there is no need */
 	exp_buffer_end = exp_buffer + buf_length;
@@ -552,7 +591,8 @@ restart:
 	exp_match_end = exp_buffer;
 
     after_read:
-	debuglog("expect: does {%s} match ",exp_printify(exp_buffer));
+	debuglog("expectlib(%d): does {%s} match ",
+		 pid, exp_printify(exp_buffer));
 	/* pattern supplied */
 	for (ec=ecases;ec->type != exp_end;ec++) {
 	    int matched = -1;
@@ -665,7 +705,7 @@ exp_expectl TCL_VARARGS_DEF(ExpHandle,arg1)
     va_end(args);
 
     if (!(ecases = (struct exp_case *)
-	malloc((1+i)*sizeof(struct exp_case))))
+	ckalloc((1+i)*sizeof(struct exp_case))))
 	sysreturn(ENOMEM);
 
 	/* now set up the actual cases */
@@ -687,10 +727,10 @@ exp_expectl TCL_VARARGS_DEF(ExpHandle,arg1)
     for (ec=ecases;ec->type != exp_end;ec++) {
 	/* free only if regexp and we compiled it for user */
 	if (ec->type == exp_regexp) {
-	    free((char *)ec->re);
+	    ckfree((char *)ec->re);
 	}
     }
-    free((char *)ecases);
+    ckfree((char *)ecases);
     return(i);
 }
 
@@ -774,7 +814,7 @@ exp_printf TCL_VARARGS_DEF(ExpHandle,handle)
     static int bufsize = 0;
 
     if (buf == NULL) {
-	buf = malloc(4000);
+	buf = ckalloc(4000);
 	bufsize = 4000;
     }
 
@@ -784,7 +824,7 @@ exp_printf TCL_VARARGS_DEF(ExpHandle,handle)
     do {
 	len = _vsnprintf(buf, bufsize, fmt, args);
 	if (len == -1) {
-	    realloc(buf, bufsize * 2);
+	    ckrealloc(buf, bufsize * 2);
 	    if (buf == NULL) {
 		return -1;
 	    }
@@ -1081,3 +1121,20 @@ exp_disconnect()
 	return(0);
 }
 #endif /* !__WIN32__ */
+
+void
+exp_setdebug(file, mode)
+    char *file;
+    int mode;
+{
+    char buf[1024];
+    if (file) {
+	sprintf(buf, "exp_internal -f %s %d", file, mode);
+    } else {
+	sprintf(buf, "exp_internal %d", mode);
+    }
+    if (!expectlib_init()) {
+	return;
+    }
+    Tcl_Eval(InterpPtr, buf);
+}

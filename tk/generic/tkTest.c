@@ -12,7 +12,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkTest.c 1.47 97/05/08 11:22:20
+ * SCCS: @(#) tkTest.c 1.50 97/11/06 16:56:32
  */
 
 #include "tkInt.h"
@@ -928,8 +928,8 @@ TestpropCmd(clientData, interp, argc, argv)
     char **argv;			/* Argument strings. */
 {
     Tk_Window main = (Tk_Window) clientData;
-    int result, actualFormat, length, value;
-    unsigned long bytesAfter;
+    int result, actualFormat;
+    unsigned long bytesAfter, length, value;
     Atom actualType, propName;
     char *property, *p, *end;
     Window w;
@@ -946,11 +946,11 @@ TestpropCmd(clientData, interp, argc, argv)
     property = NULL;
     result = XGetWindowProperty(Tk_Display(main),
 	    w, propName, 0, 100000, False, AnyPropertyType,
-	    &actualType, &actualFormat, (unsigned long *) &length,
+	    &actualType, &actualFormat, &length,
 	    &bytesAfter, (unsigned char **) &property);
     if ((result == Success) && (actualType != None)) {
 	if ((actualFormat == 8) && (actualType == XA_STRING)) {
-	    for (p = property; (p-property) < length; p++) {
+	    for (p = property; ((unsigned long)(p-property)) < length; p++) {
 		if (*p == 0) {
 		    *p = '\n';
 		}
@@ -959,16 +959,16 @@ TestpropCmd(clientData, interp, argc, argv)
 	} else {
 	    for (p = property; length > 0; length--) {
 		if (actualFormat == 32) {
-		    value = *((int *) p);
-		    p += 4;
+		    value = *((long *) p);
+		    p += sizeof(long);
 		} else if (actualFormat == 16) {
 		    value = 0xffff & (*((short *) p));
-		    p += 2;
+		    p += sizeof(short);
 		} else {
 		    value = 0xff & *p;
 		    p += 1;
 		}
-		sprintf(buffer, "0x%x", value);
+		sprintf(buffer, "0x%lx", value);
 		Tcl_AppendElement(interp, buffer);
 	    }
 	}
@@ -1021,8 +1021,8 @@ TestsendCmd(clientData, interp, argc, argv)
 		PropModeReplace,
 		(unsigned char *) "This is bogus information", 6);
     } else if (strcmp(argv[1], "prop") == 0) {
-	int result, actualFormat, length;
-	unsigned long bytesAfter;
+	int result, actualFormat;
+	unsigned long length, bytesAfter;
 	Atom actualType, propName;
 	char *property, *p, *end;
 	Window w;
@@ -1044,7 +1044,7 @@ TestsendCmd(clientData, interp, argc, argv)
 	    property = NULL;
 	    result = XGetWindowProperty(winPtr->dispPtr->display,
 		    w, propName, 0, 100000, False, XA_STRING,
-		    &actualType, &actualFormat, (unsigned long *) &length,
+		    &actualType, &actualFormat, &length,
 		    &bytesAfter, (unsigned char **) &property);
 	    if ((result == Success) && (actualType != None)
 		    && (actualFormat == 8) && (actualType == XA_STRING)) {

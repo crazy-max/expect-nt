@@ -1,0 +1,36 @@
+# ------------------------------------------------------------------------
+# 	Makefile for manual page files 
+# ------------------------------------------------------------------------
+
+MAN_SECT 	= n
+TOPDIR  	= @DESTDIR@
+MANDIR  	= @MANDIR@
+SECT_DIR 	= $(MANDIR)/man$(MAN_SECT)
+SHELL    	= /bin/sh
+RM		= rm -rf
+srcdir		= @srcdir@/../../doc
+
+MANUALS		= BLT barchart bgexec bitmap bltdebug busy dragdrop graph \
+		  htext spline table tile vector watch winop piechart
+
+OLDMANUALS	= bell cutbuffer
+
+all:
+
+install: install-dirs
+	for i in $(MANUALS) ; do \
+	    src=$(srcdir)/$$i.man ; \
+	    dest=$(SECT_DIR)/$$i.$(MAN_SECT) ; \
+	    echo "installing manual $$dest" ; \
+	    rm -f $$dest ; \
+	    sed -e "/man\.macros/r $(srcdir)/man.macros" -e '/man\.macros/d' \
+		$$src > $$dest ; \
+	    chmod 444 $$dest; \
+	done
+
+install-dirs:
+	@srcdir@/../cf/mkinstalldirs $(TOPDIR) $(MANDIR) $(SECT_DIR)
+
+clean:
+	$(RM) *.bak *\~ "#"*
+

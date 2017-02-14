@@ -1,5 +1,5 @@
 # Copyright (c) 1995-1996 Sun Microsystems, Inc.
-# SCCS: @(#) makefile.bc 1.80 97/07/30 14:19:01
+# SCCS: @(#) makefile.bc 1.82 97/11/20 15:52:39
 #
 # Borland C++ 4.5 makefile
 #
@@ -30,6 +30,8 @@ TOOLS	= c:\bc45
 ######################################################################
 # Do not modify below this line
 ######################################################################
+
+STACKSIZE = 1f0001
 
 VERSION = 80
 
@@ -142,8 +144,8 @@ DLL_LFLAGS	= -Tpd -aa -c $(DEBUGLDFLAGS) $(TOOLS)\lib\c0d32
 GUI_LFLAGS	= -Tpe -aa -c $(DEBUGLDFLAGS) $(TOOLS)\lib\c0w32
 DLL16_LFLAGS	= -Twd -c -C -A=16 $(DEBUGLDFLAGS16) $(TOOLS)\lib\c0dl
 
-DLL_LIBS	= import32 cw32i
-CON_LIBS	= $(TCLLIB) import32 cw32i
+DLL_LIBS	= import32 cw32mti
+CON_LIBS	= $(TCLLIB) import32 cw32mti
 DLL16_LIBS	= import cwl
 
 !ifndef DEBUG
@@ -161,7 +163,7 @@ DEBUGLDFLAGS16 =
 
 !endif
 
-DEFINES = _RTLDLL;$(DEBUGDEFINES)
+DEFINES = MT;_RTLDLL;$(DEBUGDEFINES)
 PROJECTCCFLAGS = $(DEBUGCCFLAGS) -w-par -w-stu
 
 
@@ -197,7 +199,7 @@ test:	    tcltest
 $(DUMPEXTS): cfgexe.cfg $(WINDIR)\winDumpExts.c
 	$(cc32) $(CON_CFLAGS) $(WINDIR)\winDumpExts.c
 	$(link32) $(CON_LFLAGS) \
-		$(TMPDIR)\winDumpExts.obj,$@,,import32 cw32i,,
+		$(TMPDIR)\winDumpExts.obj,$@,,import32 cw32mti,,
 
 $(TCLLIB): $(TCLDLL)
 	$(implib) -c $@ $(TCLDLL)
@@ -212,7 +214,7 @@ $(DLL_LIBS)
 
 
 $(TCLSH): cfgexe.cfg $(TCLSHOBJS) $(TCLLIB) $(TMPDIR)\tclsh.res
-	$(link32) $(CON_LFLAGS) @&&|
+	$(link32) -S:$(STACKSIZE) $(CON_LFLAGS) @&&|
 		$(TCLSHOBJS)
 $@
 -x
@@ -224,7 +226,7 @@ DATA PRELOAD MOVEABLE MULTIPLE
 |, $(TMPDIR)\tclsh.res
 
 $(TCLTEST): cfgtest.cfg $(TCLTESTOBJS) $(TCLLIB) $(TMPDIR)\tclsh.res
-	$(link32) $(CON_LFLAGS) @&&|
+	$(link32) -S:$(STACKSIZE) $(CON_LFLAGS) @&&|
 		$(TCLTESTOBJS)
 $@
 -x
@@ -329,7 +331,7 @@ $(TMPDIR)\tclWin16.obj : $(ROOT)\win\tclWin16.c
 
 cfgdll.cfg:
 	@$(CP) &&|
-		-n$(TMPDIR) -I$(INCLUDES) -c -WD
+		-n$(TMPDIR) -I$(INCLUDES) -c -WM
 		-D$(DEFINES) -3 -d -w $(PROJECTCCFLAGS)
 | cfgdll.cfg >NUL
 

@@ -11,7 +11,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkCanvPs.c 1.56 97/04/25 16:51:08
+ * SCCS: @(#) tkCanvPs.c 1.57 97/10/28 18:08:39
  */
 
 #include "tkInt.h"
@@ -153,9 +153,6 @@ TkCanvPostscriptCmd(canvasPtr, interp, argc, argv)
 #define STRING_LENGTH 400
     char string[STRING_LENGTH+1], *p;
     time_t now;
-#if !(defined(__WIN32__) || defined(MAC_TCL))
-    struct passwd *pwPtr;
-#endif /* __WIN32__ || MAC_TCL */
     size_t length;
     int deltaX = 0, deltaY = 0;		/* Offset of lower-left corner of
 					 * area to be marked up, measured
@@ -400,11 +397,13 @@ TkCanvPostscriptCmd(canvasPtr, interp, argc, argv)
     Tcl_AppendResult(canvasPtr->interp, "%!PS-Adobe-3.0 EPSF-3.0\n",
 	    "%%Creator: Tk Canvas Widget\n", (char *) NULL);
 #if !(defined(__WIN32__) || defined(MAC_TCL))
-    pwPtr = getpwuid(getuid());
-    Tcl_AppendResult(canvasPtr->interp, "%%For: ",
-	    (pwPtr != NULL) ? pwPtr->pw_gecos : "Unknown", "\n",
-	    (char *) NULL);
-    endpwent();
+    if (!Tcl_IsSafe(interp)) {
+	struct passwd *pwPtr = getpwuid(getuid());
+	Tcl_AppendResult(canvasPtr->interp, "%%For: ",
+		(pwPtr != NULL) ? pwPtr->pw_gecos : "Unknown", "\n",
+		(char *) NULL);
+	endpwent();
+    }
 #endif /* __WIN32__ || MAC_TCL */
     Tcl_AppendResult(canvasPtr->interp, "%%Title: Window ",
 	    Tk_PathName(canvasPtr->tkwin), "\n", (char *) NULL);
@@ -449,6 +448,7 @@ TkCanvPostscriptCmd(canvasPtr, interp, argc, argv)
      */
 
     if (TkGetNativeProlog(canvasPtr->interp) != TCL_OK) {
+	result = TCL_ERROR;
 	goto cleanup;
     }
     if (psInfo.chan != NULL) {
@@ -1120,16 +1120,25 @@ TkGetProlog(interp)
      * overallocate if we are performing CRLF translation.
      */
     
-    chan = Tcl_OpenFileChannel(interp, buffer2.string, "r", 0);
+    chan = Tcl_OpenFileChannel(NULL, buffer2.string, "r", 0);
     if (chan == NULL) {
+	/*
+	 * We have to set the error message ourselves because the
+	 * interp's result need to be reset.
+	 */
+	Tcl_ResetResult(interp);
+	Tcl_AppendResult(interp, "couldn't open \"", 
+		buffer2.string, "\": ", Tcl_PosixError(interp), (char *) NULL);
 	Tcl_DStringFree(&buffer2);
 	return TCL_ERROR;
     }
+
     bufferSize = Tcl_Seek(chan, 0L, SEEK_END);
     (void) Tcl_Seek(chan, 0L, SEEK_SET);
     if (bufferSize < 0) {
+	Tcl_ResetResult(interp);
 	Tcl_AppendResult(interp, "error seeking to end of file \"",
-		buffer2.string, "\":", Tcl_PosixError(interp), (char *) NULL);
+		buffer2.string, "\": ", Tcl_PosixError(interp), (char *) NULL);
 	Tcl_Close(NULL, chan);
 	Tcl_DStringFree(&buffer2);
 	return TCL_ERROR;
@@ -1139,8 +1148,9 @@ TkGetProlog(interp)
     bufferSize = Tcl_Read(chan, prologBuffer, bufferSize);
     Tcl_Close(NULL, chan);
     if (bufferSize < 0) {
+	Tcl_ResetResult(interp);
 	Tcl_AppendResult(interp, "error reading file \"", buffer2.string, 
-		"\":", Tcl_PosixError(interp), (char *) NULL);
+		"\": ", Tcl_PosixError(interp), (char *) NULL);
 	Tcl_DStringFree(&buffer2);
 	return TCL_ERROR;
     }

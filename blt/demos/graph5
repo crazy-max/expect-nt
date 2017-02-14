@@ -1,0 +1,49 @@
+#!/bin/sh ./myblt
+
+source bltDemo.tcl
+
+option add *Graph.elemScaleSymbols true
+option add *Graph.elemLineWidth 0
+option add *Graph.legendActiveRelief raised
+
+set graph .graph
+
+
+graph $graph 
+
+vector x 
+x set { 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 }
+
+for { set i 0 } { $i < 9 } { incr i } {
+    set name y$i
+    vector $name\(10)
+    set $name\(:) [expr $i*50.0+10.0]
+}
+
+set symbolList { none square circle diamond triangle plus cross splus scross }
+set colorList { red green blue purple magenta }
+
+for { set i 0 } { $i < 9 } { incr i } {
+    set color [lindex $colorList [expr $i%5]]
+    set symbol [lindex $symbolList $i]
+    $graph element create line$i -symbol $symbol \
+	-color ${color}4 -fill $color \
+	-x x -y y$i 
+}
+
+$graph element create line9 -symbol square \
+	-color red -fill "" \
+	-x x -y y3
+
+$graph element create line10 -symbol circle \
+	-color red -fill "" \
+	-x x -y y4
+
+table . \
+  $graph 0,0 -fill both
+
+Blt_ZoomStack $graph
+Blt_Crosshairs $graph
+Blt_ActiveLegend $graph
+Blt_ClosestPoint $graph
+Blt_PrintKey $graph

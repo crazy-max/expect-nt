@@ -1,0 +1,113 @@
+# Makefile.bc
+#
+# This makefile builds example.dll, an example of a dynamically
+# loadable Tcl extension.  This makefile is suitable for use with
+# Borland C++ 4.5x and 5.0.
+#
+# Copyright (c) 1996 Sun Microsystems, Inc.
+# SCCS: @(#) makefile.bc 1.3 96/04/24 13:28:07
+#
+
+PROJECT	= dde
+
+#
+# Project directories -- these may need to be customized for your site
+#
+# ROOT --	location of the example files.
+# TMPDIR --	location for .obj files.
+# BORLAND --	location of Borland compiler installation.
+# TCL --	location where Tcl is installed.
+#
+
+ROOT	= .
+TMPDIR	= .
+BORLAND	= c:\bc45
+TCL	= c:\tcl
+
+# uncomment the following line to compile with symbols
+DEBUG=1
+
+#
+# Borland C++ tools
+#
+
+IMPLIB  = $(BORLAND)\bin\Implib
+BCC32   = Bcc32
+TLINK32 = tlink32
+
+CP      = copy
+RM      = del
+
+INCLUDES = $(BORLAND)\include;$(TCL)\include;$(TCL)\include
+LIBDIRS	= $(BORLAND)\LIB;$(ROOT);$(TCL)\bin
+
+# Implicit Targets
+
+.c.obj:
+	$(BCC32) -n$(TMPDIR) -I$(INCLUDES) -c -WD -D$(DEFINES) -3 -d -w \
+		$(PROJECTCCFLAGS) {$< }
+
+.dll.lib:
+	$(IMPLIB) -c $@ $<
+
+!ifndef DEBUG
+# these macros cause maximum optimization and no symbols
+DEBUGLDFLAGS = 
+DEBUGCCFLAGS = -v- -vi- -O2
+!else
+# these macros enable debugging
+DEBUGLDFLAGS = -v
+DEBUGCCFLAGS = -k -Od -v
+!endif
+
+DEFINES = _RTLDLL;$(DEBUGDEFINES)
+PROJECTCCFLAGS= $(DEBUGCCFLAGS) -w-par -w-stu
+
+LNFLAGS_dll = -Tpd -aa -c $(DEBUGLDFLAGS) $(BORLAND)\lib\c0d32
+LNLIBS_dll = tcl76 tk42 import32 cw32i
+
+# 
+# Global makefile settings
+#
+
+.AUTODEPEND
+.CACHEAUTODEPEND
+
+.suffixes: .c .dll .lib .obj .exe
+
+.path.obj=$(TMPDIR)
+.path.dll=$(ROOT)
+
+DLLOBJS = \
+	dde.obj
+
+all: pkgIndex.tcl
+
+test: pkgIndex.tcl
+	@$(TCL)\bin\tclsh76 &&|
+		lappend auto_path $(ROOT)
+		package require $(PROJECT)
+		if ![catch {$(PROJECT)}] {
+		    puts "Test passed."
+		    exit 0
+		} else {
+		    puts "$(PROJECT) failed to load and run"
+		    exit 1
+		}
+|
+
+pkgIndex.tcl: $(PROJECT).dll
+	$(TCL)\bin\tclsh76 &&|
+		pkg_mkIndex $(ROOT) $(PROJECT).dll
+|
+
+$(PROJECT).dll: $(DLLOBJS) \tcl\bin\tcl76.dll
+	$(TLINK32) $(LNFLAGS_dll) $(DLLOBJS),$@,-x,$(LNLIBS_dll),,,
+	-$(CP) $(PROJECT).dll c:\tcl\bin
+
+clean:
+	-$(RM) $(TMPDIR)\*.obj
+	-$(RM) *.dll
+	-$(RM) *.lib
+	-$(RM) pkgIndex.tcl
+

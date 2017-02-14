@@ -1,0 +1,30 @@
+============
+demos/README
+============
+
+This directory contains several example scripts which can be used to test
+and demonstrate BLT's facilities.
+
+To run them under
+
+- Unix: just type the name of the script you'd like to try out (it might
+  be necessary to set the environment variable BLT_CONFDIR to the absolute
+  path name of your BLT configuration directory)
+
+- Win32: type "bltwish8x scriptname" (make sure that "bltwish8x.exe" and
+  all required DLLs are in your PATH, and that {BLT,TCL,TK}_LIBRARY are
+  set to the appropriate directories); alternatively, please follow the
+  instructions described in "win/README"
+
+- MacOS: currently no way (see "../changes" and "../mac/README" for details)
+
+Note that the example script "xpq" is a GUI for a DBMS called "pq", so it
+will only work correctly if you have this DB installed on your system;
+I've fixed "xpq" (it waited for the wrong variable to be written to) and
+wrote a very simple replacement for "pq" which allows you to try out the
+"xpq" demo: just enter at least one character in one of the entry widgets
+and hit <Return>; click on the "cancel" button to cancel the (pseudo) query.
+
+
+Have fun,
+mike

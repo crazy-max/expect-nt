@@ -1,0 +1,13 @@
+==========
+mac/README
+==========
+
+There are important parts of BLT which might also run under MacOS, but
+unfortunately I don't have access to a Mac computer, so I depend on the
+feedback of Mac folks: if you own such a computer and have managed to get
+BLT at least partially running under MacOS, please contribute to the BLT
+development by sending your patches to mike@hightec.saarlink.de.
+
+
+Thanks in advance,
+mike

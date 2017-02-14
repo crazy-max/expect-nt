@@ -9,13 +9,14 @@
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 #
-# RCS: $Header: /disk/3/CVSROOT/Mitel/expect/win/tests/basic.test,v 1.6 1997/09/30 06:52:10 chaffee Exp $
+# RCS: $Header: /disk/3/CVSROOT/Mitel/expect/win/tests/basic.test,v 1.8 1998/08/28 22:29:51 chaffee Exp $
 
 if {[string compare test [info procs test]] == 1} then {source defs}
 
 catch {unset a}
 catch {unset x}
 
+if {0} {
 test basic-1.0 {basic tests} {
     if [catch {
 	set spawn_id exp_user
@@ -191,3 +192,20 @@ test basic-1.10 {send -i} {
 	wait -i $id1
     } msg] {set msg} else {set ok 1}
 } {1}
+
+}
+test basic-1.11 {test of spawn -socket} {
+    if [catch {
+	set timeout 3
+	spawn -socket ftp.exe
+	expect {
+	    "ftp> " {set ok 1}
+	    eof {error "unexpected eof"}
+	    timeout {error "unexpected timeout"}
+	}
+    } msg] {} else {set msg $ok}
+    catch {close}
+    catch {wait}
+    set msg
+} {1}
+

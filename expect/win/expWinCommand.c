@@ -27,6 +27,14 @@
 #include "Dbg.h"
 #endif
 
+/*
+ * Arbitrary, but this is the port we are going to use for communicating
+ * with the slave driver.
+ */
+#define SLAVE_PORT	9877
+
+static void ExpSockAcceptProc _ANSI_ARGS_((ClientData callbackData,
+        Tcl_Channel chan, char *address, int port));
 
 /*
  *----------------------------------------------------------------------
@@ -180,6 +188,7 @@ Exp_SpawnCmd(ClientData clientData,Tcl_Interp *interp,int argc,char **argv)
     OVERLAPPED over;
     DWORD globalPid;
     Tcl_Channel channel = NULL;
+    Tcl_Channel channel2 = NULL;
     Tcl_Channel spawnChan = NULL;
     TclFile masterRFile;
     TclFile masterWFile;
@@ -187,12 +196,16 @@ Exp_SpawnCmd(ClientData clientData,Tcl_Interp *interp,int argc,char **argv)
     int leaveopen = 0;
     char *val;
     int hide;
+    int debug;
     char **nargv = NULL;
     int i, j;
     int usePipes = 0;
+    int useSocket = 0;
 
     char pipeName[100];
     static int pipeNameId = 0;
+    char sockPort[10];
+    static int sockPortInc = 0;
 
     /*
      * Need to create a structure with hEvent, overlapped, etc
@@ -251,6 +264,8 @@ Exp_SpawnCmd(ClientData clientData,Tcl_Interp *interp,int argc,char **argv)
 	    return TCL_ERROR;
 	} else if (streq(*argv,"-pipes")) {
 	    usePipes = 1;
+	} else if (streq(*argv,"-socket")) {
+	    useSocket = 1;
 	} else break;
     }
 
@@ -305,32 +320,76 @@ Exp_SpawnCmd(ClientData clientData,Tcl_Interp *interp,int argc,char **argv)
 	return TCL_ERROR;
     }
 
-    sprintf(pipeName, "%s%08x%08x", EXP_PIPE_BASENAME,
-	    GetCurrentProcessId(), pipeNameId++);
-    hSlaveDrv = CreateNamedPipe(pipeName,
-				PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
-				PIPE_TYPE_BYTE | PIPE_WAIT, 1, 8192, 8192,
-				20000, NULL);
+    /*
+     * The whole point of this is that named pipes don't exist on Win95,
+     * so we have the sockets as a backup communications protocol.  The user
+     * can specify that they get sockets at all times if they want.
+     */
+    if (useSocket == 0) {
+	sprintf(pipeName, "%s%08x%08x", EXP_PIPE_BASENAME,
+		GetCurrentProcessId(), pipeNameId++);
+	hSlaveDrv = CreateNamedPipe(pipeName,
+				    PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
+				    PIPE_TYPE_BYTE | PIPE_WAIT, 1, 8192, 8192,
+				    20000, NULL);
+    }
+
+    /*
+     * If we cannot create the named pipe (or if we have been told to use
+     * sockets for communications at this level), try opening a socket.
+     */
     if (hSlaveDrv == NULL) {
+	channel2 = NULL;
+	for (i = 0; i < 50 && channel2 == NULL; i++) {
+	    channel2 = Tcl_OpenTcpServer(interp, 
+					 SLAVE_PORT + sockPortInc, 
+					 NULL, 
+					 ExpSockAcceptProc, 
+					 (ClientData) &channel);
+	    sprintf(sockPort, "%d", SLAVE_PORT + sockPortInc);
+	    sockPortInc++;
+	}
+	useSocket = 1;
+    }
+
+    if (channel2 == NULL && hSlaveDrv == NULL ) {
+	debuglog("CreateNamedPipe failed: error=0x%08x\r\n", GetLastError());
+	debuglog("socket failed: error=0x%08x\r\n", GetLastError());
 	TclWinConvertError(GetLastError());
-	exp_error(interp, "unable to create named pipe: %s",
+	exp_error(interp, "unable to create either named pipe or socket: %s",
 		  Tcl_PosixError(interp));
 	goto end;
     }
 
     hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (hEvent == NULL) {
+	debuglog("CreateEvent failed: error=0x%08x\r\n", GetLastError());
 	TclWinConvertError(GetLastError());
 	exp_error(interp, "unable to create event: %s",
 		  Tcl_PosixError(interp));
 	goto end;
     }
 
+    val = exp_get_var(interp, "exp_nt_debug");
+    if (val) {
+	if (! Tcl_GetBoolean(interp, val, &debug) == TCL_OK) {
+	    Tcl_ResetResult(interp);
+	    debug = 1;
+	}
+    } else {
+	debug = 0;
+    }
+
     nargv = (char **) ckalloc(sizeof(char *) * (argc+4));
     nargv[0] = execPath;
-    nargv[1] = pipeName;
+    if (!useSocket) {
+	nargv[1] = pipeName;
+    } else {
+	nargv[1] = sockPort;
+    }
     nargv[2] = usePipes ? "1" : "0";
-    j = 3;
+    nargv[3] = debug    ? "1" : "0";
+    j = 4;
     if (imagePath[0]) {
 	nargv[j++] = imagePath;
     }
@@ -350,18 +409,8 @@ Exp_SpawnCmd(ClientData clientData,Tcl_Interp *interp,int argc,char **argv)
     slaveDrvPid = 0;
     globalPid = 1;
 #else
-    val = exp_get_var(interp, "exp_nt_debug");
-    if (val) {
-	if (Tcl_GetBoolean(interp, val, &hide) == TCL_OK) {
-	    hide = !hide;
-	} else {
-	    Tcl_ResetResult(interp);
-	    hide = 0;
-	}
-    } else {
-	hide = 1;
-    }
 
+    hide = !debug;
     dwRet = ExpCreateProcess(argc, nargv, NULL, NULL, NULL,
 			     TRUE, hide, FALSE, FALSE,
 			     &slaveDrvPid, &globalPid);
@@ -380,31 +429,44 @@ Exp_SpawnCmd(ClientData clientData,Tcl_Interp *interp,int argc,char **argv)
     /*
      * Wait for connection with the slave driver
      */
-    ZeroMemory(&over, sizeof(over));
-    over.hEvent = hEvent;
-    bRet = ConnectNamedPipe(hSlaveDrv, &over);
-    if (bRet == FALSE) {
-	dwRet = GetLastError();
-	if (dwRet == ERROR_PIPE_CONNECTED) {
-	    ;
-	} else if (dwRet == ERROR_IO_PENDING) {
-	    dwRet = WaitForSingleObject(hEvent, 120000 /* XXX 30000*/);
-	    if (dwRet != WAIT_OBJECT_0) {
+    if (!useSocket) {
+	ZeroMemory(&over, sizeof(over));
+	over.hEvent = hEvent;
+	bRet = ConnectNamedPipe(hSlaveDrv, &over);
+	if (bRet == FALSE) {
+	    dwRet = GetLastError();
+	    if (dwRet == ERROR_PIPE_CONNECTED) {
+		;
+	    } else if (dwRet == ERROR_IO_PENDING) {
+		dwRet = WaitForSingleObject(hEvent, 120000 /* XXX 30000*/);
+		if (dwRet != WAIT_OBJECT_0) {
+		    exp_error(interp, "%s did not connect to server pipe: %s",
+			      execPath, Tcl_PosixError(interp));
+		    goto end;
+		}
+		bRet = GetOverlappedResult(hSlaveDrv, &over, &count, FALSE);
+		if (bRet == FALSE) {
+		    exp_error(interp, "%s did not connect to server pipe: %s",
+			      execPath, Tcl_PosixError(interp));
+		    goto end;
+		}
+	    } else {
 		exp_error(interp, "%s did not connect to server pipe: %s",
 			  execPath, Tcl_PosixError(interp));
 		goto end;
 	    }
-	    bRet = GetOverlappedResult(hSlaveDrv, &over, &count, FALSE);
-	    if (bRet == FALSE) {
-		exp_error(interp, "%s did not connect to server pipe: %s",
-			  execPath, Tcl_PosixError(interp));
-		goto end;
-	    }
-	} else {
-	    exp_error(interp, "%s did not connect to server pipe: %s",
-		      execPath, Tcl_PosixError(interp));
-	    goto end;
 	}
+    } else {
+	while (channel == NULL) {
+	    Tcl_DoOneEvent(TCL_FILE_EVENTS);
+	}
+	/*
+	 * At this point, 'channel' should point to a valid channel that
+	 * we can use for I/O.
+	 * We aren't interested in listening for more connections, so we
+	 * can close that channel now.
+	 */
+	Tcl_Close(interp, channel2);
     }
 
     /*
@@ -412,23 +474,40 @@ Exp_SpawnCmd(ClientData clientData,Tcl_Interp *interp,int argc,char **argv)
      */
     debuglog("parent: waiting for sync bytes\r\n");
 
-    ResetEvent(hEvent);
-    bRet = ReadFile(hSlaveDrv, buf, 8, &count, &over);
-    if (bRet == FALSE) {
-	dwRet = GetLastError();
-	if (dwRet == ERROR_IO_PENDING) {
-	    dwRet = WaitForSingleObject(hEvent, 30000);
-	    if (dwRet != WAIT_OBJECT_0) {
-		exp_error(interp, "%s did not synchronize with master: %s",
-			  execPath, Tcl_PosixError(interp));
-		goto end;
+    if (!useSocket) {
+	ResetEvent(hEvent);
+	bRet = ReadFile(hSlaveDrv, buf, 8, &count, &over);
+	if (bRet == FALSE) {
+	    dwRet = GetLastError();
+	    if (dwRet == ERROR_IO_PENDING) {
+		dwRet = WaitForSingleObject(hEvent, 30000);
+		if (dwRet != WAIT_OBJECT_0) {
+		    exp_error(interp, "%s did not synchronize with master: %s",
+			      execPath, Tcl_PosixError(interp));
+		    goto end;
+		}
+		bRet = GetOverlappedResult(hSlaveDrv, &over, &count, FALSE);
+		if (bRet == FALSE) {
+		    exp_error(interp, "%s did not synchronize with master: %s",
+			      execPath, Tcl_PosixError(interp));
+		    goto end;
+		}
 	    }
-	    bRet = GetOverlappedResult(hSlaveDrv, &over, &count, FALSE);
-	    if (bRet == FALSE) {
-		exp_error(interp, "%s did not synchronize with master: %s",
-			  execPath, Tcl_PosixError(interp));
-		goto end;
-	    }
+	}
+    } else {
+	/*
+	 * We are reading data from the socket channel right away, so
+	 * we need to set the mode to binary now.  If we are using
+	 * named pipes on NT, the channel doesn't exist yet, and we
+	 * would instead read directly from the pipe.
+	 */
+	Tcl_SetChannelOption(interp, channel, "-translation", "binary");
+	count = Tcl_Read(channel, buf, 8);
+	if( count != 8 )
+	{
+	    exp_error(interp, "Synchronized with wrong number of bytes %d",
+		      count);
+	    goto end;
 	}
     }
 
@@ -441,10 +520,13 @@ Exp_SpawnCmd(ClientData clientData,Tcl_Interp *interp,int argc,char **argv)
     }
     globalPid = buf[4] | (buf[5] << 8) | (buf[6] << 16) | (buf[7] << 24);
 
-    masterRFile = TclWinMakeFile(hSlaveDrv);
-    masterWFile = TclWinMakeFile(hSlaveDrv);
+    if (!useSocket) {
+	masterRFile = TclWinMakeFile(hSlaveDrv);
+	masterWFile = TclWinMakeFile(hSlaveDrv);
+	
+	channel = TclpCreateCommandChannel(masterRFile, masterWFile, NULL, 0, NULL);
+    }
 
-    channel = TclpCreateCommandChannel(masterRFile, masterWFile, NULL, 0, NULL);
     if (channel == NULL) {
 	goto end;
     }
@@ -578,3 +660,37 @@ Exp_KillCmd(ClientData clientData,Tcl_Interp *interp,int argc,char **argv)
 
     return TCL_OK;
 }
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * ExpSockAcceptProc --
+ *
+ *	For doing socket communication with slave driver.  This
+ *	routine is called when the slave driver connects up to us.
+ *
+ * Results:
+ *	None
+ *----------------------------------------------------------------------
+ */
+
+static void
+ExpSockAcceptProc(callbackData, chan, address, port)
+     ClientData callbackData;
+     Tcl_Channel chan;
+     char *address;
+     int port;
+{
+    Tcl_Channel * ptr;
+
+    /*
+     * We do a couple of things here.   First we save the pointer to
+     * the actual channel that we use for read/write, and secondly we set
+     * the event that is used for synchronization.
+     */
+    ptr = (Tcl_Channel *) callbackData;
+    *ptr = chan;
+    return;
+}
+
+

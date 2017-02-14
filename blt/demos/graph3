@@ -1,0 +1,64 @@
+#!/bin/sh ./myblt
+
+source bltDemo.tcl
+
+set tickvalues { 
+    0 31 59 90 120 151 181 212 243 273 304 334 365 
+}
+option add *xMajorTicks $tickvalues
+
+set graph .g
+
+graph $graph 
+$graph xaxis configure -title "Year 1983" -rotate 45 
+$graph yaxis configure -title "Random values"
+$graph y2axis configure -mapped true -title "Random values"
+
+set ticknames(0) Jan
+set ticknames(31) Feb
+set ticknames(59) Mar
+set ticknames(90) Apr
+set ticknames(120) May
+set ticknames(151) Jun
+set ticknames(181) Jul
+set ticknames(212) Aug
+set ticknames(243) Sep
+set ticknames(273) Oct
+set ticknames(304) Nov
+set ticknames(334) Dec
+set ticknames(365) Year
+
+set x { 
+    17 45 72 100 137 175 199 240 250 300 315 340 
+}
+set y { 
+    0.693147 0.405465 0.287682 0.223144 0.182322 0.154151 
+    0.133531 0.117783 0.105361 0.0953102 0.0870114 
+}
+
+set y2 { 
+    19.8669 38.9418 56.4642 71.7356 84.1471 93.2039
+    98.545 99.9574 97.3848 90.9297 80.8496
+}
+
+$graph element create line1 -symbol circle -fill red -linewidth 1 \
+    -x $x -y $y 
+$graph element create line2 -symbol square -fill yellow -linewidth 1 \
+    -x $x -y $y2 -mapy y2
+
+proc FormatLabel { w value } {
+    global ticknames
+    # Determine the element name from the value
+    set index [expr round($value)]
+    if ![info exists ticknames($value)] {
+        return $value 
+    }
+    return "$ticknames($value)"
+}
+
+$graph xaxis configure -command FormatLabel -min 0 -max 365
+table . .g -fill both
+
+Blt_ZoomStack .g
+Blt_ActiveLegend .g
+Blt_ClosestPoint .g

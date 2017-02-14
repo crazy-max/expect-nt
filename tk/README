@@ -1,24 +1,25 @@
 The Tk Toolkit
 
-SCCS: @(#) README 1.45 97/08/14 08:48:22
+SCCS: @(#) README 1.47 97/11/20 12:48:16
 
 1. Introduction
 ---------------
 
 This directory and its descendants contain the sources and documentation
 for Tk, an X11 toolkit implemented with the Tcl scripting language.  The
-information here corresponds to Tk 8.0.  This release is designed to work
-with Tcl 8.0 and may not work with any other version of Tcl.
+information here corresponds to Tk 8.0p2, which is the second patch update
+for Tk 8.0.  This release is designed to work with Tcl 8.0p2 and may not
+work with any other version of Tcl.
 
 Tk 8.0 is a major release with significant new features such as native
 look and feel on Macintoshes and PCs, a new font mechanism, application
 embedding, and proper support for Safe-Tcl.  See below for details.
 There should be no backward incompatibilities in Tk 8.0 that affect
-scripts.
+scripts.  This patch release fixes various bugs in Tk 8.0; there are no
+feature changes relative to Tk 8.0.
 
-Note: with this release the Tk version number skips from 4.2 to 8.0.
-The jump was made in order to synchronize the Tcl and Tk version
-numbers.
+Note: with Tk 8.0 the Tk version number skipped from 4.2 to 8.0. The
+jump was made in order to synchronize the Tcl and Tk version numbers.
 
 2. Documentation
 ----------------
@@ -26,11 +27,11 @@ numbers.
 The best way to get started with Tk is to read one of the introductory
 books on Tcl and Tk:
 
+    Practical Programming in Tcl and Tk, 2nd Edition, by Brent Welch,
+    Prentice-Hall, 1997, ISBN 0-13-616830-2
+
     Tcl and the Tk Toolkit, by John Ousterhout,
     Addison-Wesley, 1994, ISBN 0-201-63337-X
-
-    Practical Programming in Tcl and Tk, by Brent Welch,
-    Prentice-Hall, 1995, ISBN 0-13-182007-9
 
     Exploring Expect, by Don Libes,
     O'Reilly and Associates, 1995, ISBN 1-56592-090-2

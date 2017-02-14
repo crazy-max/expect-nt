@@ -8,7 +8,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclMacOSA.r 1.4 97/08/15 10:51:01
+ * SCCS: @(#) tclMacOSA.r 1.6 97/11/20 18:40:02
  */
 
 #include <Types.r>
@@ -71,5 +71,6 @@ resource 'STR ' (-16397, purgeable) {
 
 data 'TEXT' (4000,"pkgIndex",purgeable, preload) {
 	"# Tcl package index file, version 1.0\n"
-	"package ifneeded Tclapplescript 1.0 [list tclPkgSetup $dir Tclapplescript 1.0 {{Tclapplescript.shlb load AppleScript}}]\n"
+	"package ifneeded Tclapplescript 1.0 [list tclPkgSetup $dir Tclapplescript 1.0 {{Tclapplescript" 
+	".shlb load AppleScript}}]\n"
 };

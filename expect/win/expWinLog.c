@@ -39,7 +39,7 @@ ExpSyslog TCL_VARARGS_DEF(char *,arg1)
 {
     char *fmt;
     va_list args;
-    char buf[4096];
+    char buf[16384];
     char *strings[1];
 
     fmt = TCL_VARARGS_START(char *,arg1,args);

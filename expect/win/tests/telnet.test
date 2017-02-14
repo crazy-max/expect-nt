@@ -9,7 +9,7 @@
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 #
-# RCS: $Header: /disk/3/CVSROOT/Mitel/expect/win/tests/telnet.test,v 1.1 1997/09/05 05:30:39 chaffee Exp $
+# RCS: $Header: /disk/3/CVSROOT/Mitel/expect/win/tests/telnet.test,v 1.2 1999/01/06 10:24:33 chaffee Exp $
 
 if {[string compare test [info procs test]] == 1} then {source defs}
 
@@ -27,7 +27,7 @@ test telnet-1.1 {basic BSD telnet tests} {
 	    eof {error "unable to spawn telnet"}
 	    timeout {error "no response seen from telnet"}
 	}
-	send "open odie.cs.berkeley.edu\r"
+	send "open quimby.cs.berkeley.edu\r"
 	expect {
 	    "login: " {}
 	    eof {error "unexpected eof"}

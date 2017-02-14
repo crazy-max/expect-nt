@@ -11,14 +11,19 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclMacResource.c 1.23 97/06/13 18:58:59
+ * SCCS: @(#) tclMacResource.c 1.35 97/11/24 15:03:58
  */
 
+#include <Errors.h>
 #include <FSpCompat.h>
+#include <Processes.h>
 #include <Resources.h>
 #include <Sound.h>
 #include <Strings.h>
+#include <Traps.h>
+#include <LowMem.h>
 
+#include "FullPath.h"
 #include "tcl.h"
 #include "tclInt.h"
 #include "tclMac.h"
@@ -26,10 +31,46 @@
 #include "tclMacPort.h"
 
 /*
+ * This flag tells the RegisterResource function to insert the
+ * resource into the tail of the resource fork list.  Needed only
+ * Resource_Init.
+ */
+ 
+#define TCL_RESOURCE_INSERT_TAIL 1
+/*
+ * 2 is taken by TCL_RESOURCE_DONT_CLOSE
+ * which is the only public flag to TclMacRegisterResourceFork.
+ */
+ 
+#define TCL_RESOURCE_CHECK_IF_OPEN 4
+
+/*
+ * Pass this in the mode parameter of SetSoundVolume to determine
+ * which volume to set.
+ */
+
+enum WhichVolume {
+    SYS_BEEP_VOLUME,    /* This sets the volume for SysBeep calls */ 
+    DEFAULT_SND_VOLUME, /* This one for SndPlay calls */
+    RESET_VOLUME        /* And this undoes the last call to SetSoundVolume */
+};
+ 
+/*
  * Hash table to track open resource files.
  */
+
+typedef struct OpenResourceFork {
+    short fileRef;
+    int   flags;
+} OpenResourceFork;
+
+
+
 static Tcl_HashTable nameTable;		/* Id to process number mapping. */
 static Tcl_HashTable resourceTable;	/* Process number to id mapping. */
+static Tcl_Obj *resourceForkList;       /* Ordered list of resource forks */
+static int appResourceIndex;            /* This is the index of the application*
+					 * in the list of resource forks */
 static int newId = 0;			/* Id source. */
 static int initialized = 0;		/* 0 means static structures haven't 
 					 * been initialized yet. */
@@ -42,9 +83,15 @@ static int osTypeInit = 0;		/* 0 means Tcl object of osType hasn't
 static void		DupOSTypeInternalRep _ANSI_ARGS_((Tcl_Obj *srcPtr,
 			    Tcl_Obj *copyPtr));
 static void		ResourceInit _ANSI_ARGS_((void));
+static void             BuildResourceForkList _ANSI_ARGS_((void));
 static int		SetOSTypeFromAny _ANSI_ARGS_((Tcl_Interp *interp,
 			    Tcl_Obj *objPtr));
 static void		UpdateStringOfOSType _ANSI_ARGS_((Tcl_Obj *objPtr));
+static OpenResourceFork* GetRsrcRefFromObj _ANSI_ARGS_((Tcl_Obj *objPtr,
+		                int okayOnReadOnly, const char *operation,
+	                        Tcl_Obj *resultPtr));
+
+static void 		SetSoundVolume(int volume, enum WhichVolume mode);
 
 /*
  * The structures below defines the Tcl object type defined in this file by
@@ -90,25 +137,44 @@ Tcl_ResourceObjCmd(
     Tcl_DString buffer;
     char *nativeName;
     char *stringPtr;
-    Tcl_HashEntry *resourceHashPtr;
-    Tcl_HashEntry *nameHashPtr;
-    Handle resource;
+    char errbuf[16];
+    OpenResourceFork *resourceRef;
+    Handle resource = NULL;
     OSErr err;
     int count, i, limitSearch = false, length;
-    short id, saveRef;
+    short id, saveRef, resInfo;
     Str255 theName;
     OSType rezType;
-    int new, gotInt,releaseIt = 0;
+    int gotInt, releaseIt = 0, force;
     char *resourceId = NULL;	
     long size;
     char macPermision;
     int mode;
 
-    static char *writeSwitches[] = {"-id", "-name", "-file", (char *) NULL};
-    static char *switches[] =
-	    {"close", "list", "open", "read", "types", "write", (char *) NULL};
+    static char *switches[] = {"close", "delete" ,"files", "list", 
+            "open", "read", "types", "write", (char *) NULL
+    };
+	        
+    enum {
+            RESOURCE_CLOSE, RESOURCE_DELETE, RESOURCE_FILES, RESOURCE_LIST, 
+            RESOURCE_OPEN, RESOURCE_READ, RESOURCE_TYPES, RESOURCE_WRITE
+    };
+              
+    static char *writeSwitches[] = {
+            "-id", "-name", "-file", "-force", (char *) NULL
+    };
+            
+    enum {
+            RESOURCE_WRITE_ID, RESOURCE_WRITE_NAME, 
+            RESOURCE_WRITE_FILE, RESOURCE_FORCE
+    };
+            
+    static char *deleteSwitches[] = {"-id", "-name", "-file", (char *) NULL};
+             
+    enum {RESOURCE_DELETE_ID, RESOURCE_DELETE_NAME, RESOURCE_DELETE_FILE};
 
     resultPtr = Tcl_GetObjResult(interp);
+    
     if (objc < 2) {
 	Tcl_WrongNumArgs(interp, 1, objv, "option ?arg ...?");
 	return TCL_ERROR;
@@ -124,36 +190,251 @@ Tcl_ResourceObjCmd(
     result = TCL_OK;
 
     switch (index) {
-	case 0:			/* close */
+	case RESOURCE_CLOSE:			
 	    if (objc != 3) {
 		Tcl_WrongNumArgs(interp, 2, objv, "resourceRef");
 		return TCL_ERROR;
 	    }
 	    stringPtr = Tcl_GetStringFromObj(objv[2], &length);
-	    nameHashPtr = Tcl_FindHashEntry(&nameTable, stringPtr);
-	    if (nameHashPtr == NULL) {
-		Tcl_AppendStringsToObj(resultPtr,
-			"invalid resource file reference \"",
-			stringPtr, "\"", (char *) NULL);
+	    fileRef = TclMacUnRegisterResourceFork(stringPtr, resultPtr);
+	    
+	    if (fileRef >= 0) {
+	        CloseResFile((short) fileRef);
+	        return TCL_OK;
+	    } else {
+	        return TCL_ERROR;
+	    }
+	case RESOURCE_DELETE:
+	    if (!((objc >= 3) && (objc <= 9) && ((objc % 2) == 1))) {
+		Tcl_WrongNumArgs(interp, 2, objv, 
+		    "?-id resourceId? ?-name resourceName? ?-file \
+resourceRef? resourceType");
 		return TCL_ERROR;
 	    }
-	    fileRef = (long) Tcl_GetHashValue(nameHashPtr);
-	    if (fileRef == 0) {
-		Tcl_AppendStringsToObj(resultPtr,
-			"can't close system resource", (char *) NULL);
-		return TCL_ERROR;
-	    }
-	    Tcl_DeleteHashEntry(nameHashPtr);
-	    resourceHashPtr = Tcl_FindHashEntry(&resourceTable, (char *) fileRef);
-	    if (resourceHashPtr == NULL) {
-		panic("how did this happen");
-	    }
-	    ckfree(Tcl_GetHashValue(resourceHashPtr));
-	    Tcl_DeleteHashEntry(resourceHashPtr);
+	    
+	    i = 2;
+	    fileRef = -1;
+	    gotInt = false;
+	    resourceId = NULL;
+	    limitSearch = false;
 
-	    CloseResFile((short) fileRef);
+	    while (i < (objc - 2)) {
+		if (Tcl_GetIndexFromObj(interp, objv[i], deleteSwitches,
+			"option", 0, &index) != TCL_OK) {
+		    return TCL_ERROR;
+		}
+
+		switch (index) {
+		    case RESOURCE_DELETE_ID:		
+			if (Tcl_GetLongFromObj(interp, objv[i+1], &rsrcId)
+				!= TCL_OK) {
+			    return TCL_ERROR;
+			}
+			gotInt = true;
+			break;
+		    case RESOURCE_DELETE_NAME:		
+			resourceId = Tcl_GetStringFromObj(objv[i+1], &length);
+			if (length > 255) {
+			    Tcl_AppendStringsToObj(resultPtr,"-name argument ",
+			            "too long, must be < 255 characters",
+			            (char *) NULL);
+			    return TCL_ERROR;
+			}
+			strcpy((char *) theName, resourceId);
+			resourceId = (char *) theName;
+			c2pstr(resourceId);
+			break;
+		    case RESOURCE_DELETE_FILE:
+		        resourceRef = GetRsrcRefFromObj(objv[i+1], 0, 
+		                "delete from", resultPtr);
+		        if (resourceRef == NULL) {
+		            return TCL_ERROR;
+		        }	
+			limitSearch = true;
+			break;
+		}
+		i += 2;
+	    }
+	    
+	    if ((resourceId == NULL) && !gotInt) {
+		Tcl_AppendStringsToObj(resultPtr,"you must specify either ",
+		        "\"-id\" or \"-name\" or both ",
+		        "to \"resource delete\"",
+		        (char *) NULL);
+	        return TCL_ERROR;
+            }
+
+	    if (Tcl_GetOSTypeFromObj(interp, objv[i], &rezType) != TCL_OK) {
+		return TCL_ERROR;
+	    }
+
+	    if (limitSearch) {
+		saveRef = CurResFile();
+		UseResFile((short) resourceRef->fileRef);
+	    }
+	    
+	    SetResLoad(false);
+	    
+	    if (gotInt == true) {
+	        if (limitSearch) {
+		    resource = Get1Resource(rezType, rsrcId);
+		} else {
+		    resource = GetResource(rezType, rsrcId);
+		}
+                err = ResError();
+            
+                if (err == resNotFound || resource == NULL) {
+	            Tcl_AppendStringsToObj(resultPtr, "resource not found",
+	                (char *) NULL);
+	            result = TCL_ERROR;
+	            goto deleteDone;               
+                } else if (err != noErr) {
+                    char buffer[16];
+                
+                    sprintf(buffer, "%12d", err);
+	            Tcl_AppendStringsToObj(resultPtr, "resource error #",
+	                    buffer, "occured while trying to find resource",
+	                    (char *) NULL);
+	            result = TCL_ERROR;
+	            goto deleteDone;               
+	        }
+	    } 
+	    
+	    if (resourceId != NULL) {
+	        Handle tmpResource;
+	        if (limitSearch) {
+	            tmpResource = Get1NamedResource(rezType,
+			    (StringPtr) resourceId);
+	        } else {
+	            tmpResource = GetNamedResource(rezType,
+			    (StringPtr) resourceId);
+	        }
+                err = ResError();
+            
+                if (err == resNotFound || tmpResource == NULL) {
+	            Tcl_AppendStringsToObj(resultPtr, "resource not found",
+	                (char *) NULL);
+	            result = TCL_ERROR;
+	            goto deleteDone;               
+                } else if (err != noErr) {
+                    char buffer[16];
+                
+                    sprintf(buffer, "%12d", err);
+	            Tcl_AppendStringsToObj(resultPtr, "resource error #",
+	                    buffer, "occured while trying to find resource",
+	                    (char *) NULL);
+	            result = TCL_ERROR;
+	            goto deleteDone;               
+	        }
+	        
+	        if (gotInt) { 
+	            if (resource != tmpResource) {
+	                Tcl_AppendStringsToObj(resultPtr,
+				"\"-id\" and \"-name\" ",
+	                        "values do not point to the same resource",
+	                        (char *) NULL);
+	                result = TCL_ERROR;
+	                goto deleteDone;
+	            }
+	        } else {
+	            resource = tmpResource;
+	        }
+	    }
+	        
+       	    resInfo = GetResAttrs(resource);
+	    
+	    if ((resInfo & resProtected) == resProtected) {
+	        Tcl_AppendStringsToObj(resultPtr, "resource ",
+	                "cannot be deleted: it is protected.",
+	                (char *) NULL);
+	        result = TCL_ERROR;
+	        goto deleteDone;               
+	    } else if ((resInfo & resSysHeap) == resSysHeap) {   
+	        Tcl_AppendStringsToObj(resultPtr, "resource",
+	                "cannot be deleted: it is in the system heap.",
+	                (char *) NULL);
+	        result = TCL_ERROR;
+	        goto deleteDone;               
+	    }
+	    
+	    /*
+	     * Find the resource file, if it was not specified,
+	     * so we can flush the changes now.  Perhaps this is
+	     * a little paranoid, but better safe than sorry.
+	     */
+	     
+	    RemoveResource(resource);
+	    
+	    if (!limitSearch) {
+	        UpdateResFile(HomeResFile(resource));
+	    } else {
+	        UpdateResFile(resourceRef->fileRef);
+	    }
+	    
+	    
+	    deleteDone:
+	    
+            SetResLoad(true);
+	    if (limitSearch) {
+                 UseResFile(saveRef);                        
+	    }
+	    return result;
+	    
+	case RESOURCE_FILES:
+	    if ((objc < 2) || (objc > 3)) {
+		Tcl_SetStringObj(resultPtr,
+		        "wrong # args: should be \"resource files \
+?resourceId?\"", -1);
+		return TCL_ERROR;
+	    }
+	    
+	    if (objc == 2) {
+	        stringPtr = Tcl_GetStringFromObj(resourceForkList, &length);
+	        Tcl_SetStringObj(resultPtr, stringPtr, length);
+	    } else {
+                FCBPBRec fileRec;
+                Handle pathHandle;
+                short pathLength;
+                Str255 fileName;
+	        
+	        if (strcmp(Tcl_GetStringFromObj(objv[2], NULL), "ROM Map")
+			    == 0) {
+	            Tcl_SetStringObj(resultPtr,"no file path for ROM Map", -1);
+	            return TCL_ERROR;
+	        }
+	        
+	        resourceRef = GetRsrcRefFromObj(objv[2], 1, "files", resultPtr);
+	        if (resourceRef == NULL) {
+	            return TCL_ERROR;
+	        }
+
+                fileRec.ioCompletion = NULL;
+                fileRec.ioFCBIndx = 0;
+                fileRec.ioNamePtr = fileName;
+                fileRec.ioVRefNum = 0;
+                fileRec.ioRefNum = resourceRef->fileRef;
+                err = PBGetFCBInfo(&fileRec, false);
+                if (err != noErr) {
+                    Tcl_SetStringObj(resultPtr,
+                            "could not get FCB for resource file", -1);
+                    return TCL_ERROR;
+                }
+                
+                err = GetFullPath(fileRec.ioFCBVRefNum, fileRec.ioFCBParID,
+                        fileRec.ioNamePtr, &pathLength, &pathHandle);
+                if ( err != noErr) {
+                    Tcl_SetStringObj(resultPtr,
+                            "could not get file path from token", -1);
+                    return TCL_ERROR;
+                }
+                
+                HLock(pathHandle);
+                Tcl_SetStringObj(resultPtr,*pathHandle,pathLength);
+                HUnlock(pathHandle);
+                DisposeHandle(pathHandle);
+            }                    	    
 	    return TCL_OK;
-	case 1:			/* list */
+	case RESOURCE_LIST:			
 	    if (!((objc == 3) || (objc == 4))) {
 		Tcl_WrongNumArgs(interp, 2, objv, "resourceType ?resourceRef?");
 		return TCL_ERROR;
@@ -163,17 +444,14 @@ Tcl_ResourceObjCmd(
 	    }
 
 	    if (objc == 4) {
-		stringPtr = Tcl_GetStringFromObj(objv[3], &length);
-		nameHashPtr = Tcl_FindHashEntry(&nameTable, stringPtr);
-		if (nameHashPtr == NULL) {
-		    Tcl_AppendStringsToObj(resultPtr,
-			"invalid resource file reference \"",
-			stringPtr, "\"", (char *) NULL);
+	        resourceRef = GetRsrcRefFromObj(objv[3], 1, 
+		                "list", resultPtr);
+		if (resourceRef == NULL) {
 		    return TCL_ERROR;
-		}
-		fileRef = (long) Tcl_GetHashValue(nameHashPtr);
+		}	
+
 		saveRef = CurResFile();
-		UseResFile((short) fileRef);
+		UseResFile((short) resourceRef->fileRef);
 		limitSearch = true;
 	    }
 
@@ -193,12 +471,14 @@ Tcl_ResourceObjCmd(
 		if (resource != NULL) {
 		    GetResInfo(resource, &id, (ResType *) &rezType, theName);
 		    if (theName[0] != 0) {
-			objPtr = Tcl_NewStringObj((char *) theName + 1, theName[0]);
+			objPtr = Tcl_NewStringObj((char *) theName + 1,
+				theName[0]);
 		    } else {
 			objPtr = Tcl_NewIntObj(id);
 		    }
 		    ReleaseResource(resource);
-		    result = Tcl_ListObjAppendElement(interp, resultPtr, objPtr);
+		    result = Tcl_ListObjAppendElement(interp, resultPtr,
+			    objPtr);
 		    if (result != TCL_OK) {
 			Tcl_DecrRefCount(objPtr);
 			break;
@@ -212,7 +492,7 @@ Tcl_ResourceObjCmd(
 	    }
 	
 	    return TCL_OK;
-	case 2:			/* open */
+	case RESOURCE_OPEN:			
 	    if (!((objc == 3) || (objc == 4))) {
 		Tcl_WrongNumArgs(interp, 2, objv, "fileName ?permissions?");
 		return TCL_ERROR;
@@ -233,8 +513,8 @@ Tcl_ResourceObjCmd(
 
 	    /*
 	     * Get permissions for the file.  We really only understand
-	     * read-only and shared-read-write.  If no permissions are given we
-	     * default to read only.
+	     * read-only and shared-read-write.  If no permissions are 
+	     * given we default to read only.
 	     */
 	    
 	    if (objc == 4) {
@@ -260,7 +540,15 @@ Tcl_ResourceObjCmd(
 		macPermision = fsRdPerm;
 	    }
 	    
+	    /*
+	     * Don't load in any of the resources in the file, this could 
+	     * cause problems if you open a file that has CODE resources...
+	     */
+	     
+	    SetResLoad(false); 
 	    fileRef = (long) FSpOpenResFileCompat(&fileSpec, macPermision);
+	    SetResLoad(true);
+	    
 	    if (fileRef == -1) {
 	    	err = ResError();
 		if (((err == fnfErr) || (err == eofErr)) &&
@@ -270,6 +558,7 @@ Tcl_ResourceObjCmd(
 		     * opening it for writing we will create the resource fork
 		     * now.
 		     */
+		     
 		    HCreateResFile(fileSpec.vRefNum, fileSpec.parID,
 			    fileSpec.name);
 		    fileRef = (long) FSpOpenResFileCompat(&fileSpec,
@@ -292,29 +581,28 @@ Tcl_ResourceObjCmd(
 		    return TCL_ERROR;
 		}
 	    }
-		
-	    resourceHashPtr = Tcl_CreateHashEntry(&resourceTable,
-			(char *) fileRef, &new);
-	    if (!new) {
-		resourceId = (char *) Tcl_GetHashValue(resourceHashPtr);
-		Tcl_SetStringObj(resultPtr, resourceId, -1);
-		return TCL_OK;
-	    }
-	  	
-	    resourceId = (char *) ckalloc(15);
-	    sprintf(resourceId, "resource%d", newId);
-	    Tcl_SetHashValue(resourceHashPtr, resourceId);
-	    newId++;
+	    	    
+            /*
+             * The FspOpenResFile function does not set the ResFileAttrs.
+             * Even if you open the file read only, the mapReadOnly
+             * attribute is not set.  This means we can't detect writes to a 
+             * read only resource fork until the write fails, which is bogus.  
+             * So set it here...
+             */
+            
+            if (macPermision == fsRdPerm) {
+                SetResFileAttrs(fileRef, mapReadOnly);
+            }
+            
+            Tcl_SetStringObj(resultPtr, "", 0);
+            if (TclMacRegisterResourceFork(fileRef, resultPtr, 
+                    TCL_RESOURCE_CHECK_IF_OPEN) != TCL_OK) {
+                CloseResFile(fileRef);
+		return TCL_ERROR;
+            }
 
-	    nameHashPtr = Tcl_CreateHashEntry(&nameTable, resourceId, &new);
-	    if (!new) {
-		panic("resource id has repeated itself");
-	    }
-	    Tcl_SetHashValue(nameHashPtr, fileRef);
-		
-	    Tcl_SetStringObj(resultPtr, resourceId, -1);
 	    return TCL_OK;
-	case 3:			/* read */
+	case RESOURCE_READ:			
 	    if (!((objc == 4) || (objc == 5))) {
 		Tcl_WrongNumArgs(interp, 2, objv,
 			"resourceType resourceId ?resourceRef?");
@@ -356,24 +644,21 @@ Tcl_ResourceObjCmd(
 		    (char *) NULL);
 		return TCL_ERROR;
 	    }
-	case 4:			/* types */
+	case RESOURCE_TYPES:			
 	    if (!((objc == 2) || (objc == 3))) {
 		Tcl_WrongNumArgs(interp, 2, objv, "?resourceRef?");
 		return TCL_ERROR;
 	    }
 
 	    if (objc == 3) {
-		stringPtr = Tcl_GetStringFromObj(objv[2], &length);
-		nameHashPtr = Tcl_FindHashEntry(&nameTable, stringPtr);
-		if (nameHashPtr == NULL) {
-		    Tcl_AppendStringsToObj(resultPtr,
-			"invalid resource file reference \"",
-			stringPtr, "\"", (char *) NULL);
-			return TCL_ERROR;
+	        resourceRef = GetRsrcRefFromObj(objv[2], 1, 
+		                "get types of", resultPtr);
+		if (resourceRef == NULL) {
+		    return TCL_ERROR;
 		}
-		fileRef = (long) Tcl_GetHashValue(nameHashPtr);
+			
 		saveRef = CurResFile();
-		UseResFile((short) fileRef);
+		UseResFile((short) resourceRef->fileRef);
 		limitSearch = true;
 	    }
 
@@ -401,53 +686,56 @@ Tcl_ResourceObjCmd(
 	    }
 		
 	    return result;
-	case 5:			/* write */
-	    if (!((objc >= 4) && (objc <= 10) && ((objc % 2) == 0))) {
+	case RESOURCE_WRITE:			
+	    if ((objc < 4) || (objc > 11)) {
 		Tcl_WrongNumArgs(interp, 2, objv, 
-		    "?-id resourceId? ?-name resourceName? ?-file resourceRef? resourceType data");
+		"?-id resourceId? ?-name resourceName? ?-file resourceRef?\
+ ?-force? resourceType data");
 		return TCL_ERROR;
 	    }
 	    
 	    i = 2;
-	    fileRef = -1;
 	    gotInt = false;
 	    resourceId = NULL;
 	    limitSearch = false;
+	    force = 0;
 
 	    while (i < (objc - 2)) {
 		if (Tcl_GetIndexFromObj(interp, objv[i], writeSwitches,
-			"option", 0, &index) != TCL_OK) {
+			"switch", 0, &index) != TCL_OK) {
 		    return TCL_ERROR;
 		}
 
 		switch (index) {
-		    case 0:			/* -id */
+		    case RESOURCE_WRITE_ID:		
 			if (Tcl_GetLongFromObj(interp, objv[i+1], &rsrcId)
 				!= TCL_OK) {
 			    return TCL_ERROR;
 			}
 			gotInt = true;
+		        i += 2;
 			break;
-		    case 1:			/* -name */
+		    case RESOURCE_WRITE_NAME:		
 			resourceId = Tcl_GetStringFromObj(objv[i+1], &length);
 			strcpy((char *) theName, resourceId);
 			resourceId = (char *) theName;
 			c2pstr(resourceId);
+		        i += 2;
 			break;
-		    case 2:			/* -file */
-			stringPtr = Tcl_GetStringFromObj(objv[i+1], &length);
-			nameHashPtr = Tcl_FindHashEntry(&nameTable, stringPtr);
-			if (nameHashPtr == NULL) {
-			    Tcl_AppendStringsToObj(resultPtr,
-				    "invalid resource file reference \"",
-				    stringPtr, "\"", (char *) NULL);
-			    return TCL_ERROR;
-			}
-			fileRef = (long) Tcl_GetHashValue(nameHashPtr);
+		    case RESOURCE_WRITE_FILE:		
+	                resourceRef = GetRsrcRefFromObj(objv[i+1], 0, 
+		                        "write to", resultPtr);
+                        if (resourceRef == NULL) {
+                            return TCL_ERROR;
+		        }	
 			limitSearch = true;
+		        i += 2;
 			break;
+		    case RESOURCE_FORCE:
+		        force = 1;
+		        i += 1;
+		        break;
 		}
-		i += 2;
 	    }
 	    if (Tcl_GetOSTypeFromObj(interp, objv[i], &rezType) != TCL_OK) {
 		return TCL_ERROR;
@@ -462,28 +750,150 @@ Tcl_ResourceObjCmd(
 	    }
 	    if (limitSearch) {
 		saveRef = CurResFile();
-		UseResFile((short) fileRef);
+		UseResFile((short) resourceRef->fileRef);
 	    }
 	    
-	    resource = NewHandle(length);
-	    HLock(resource);
-	    memcpy(*resource, stringPtr, length);
-	    HUnlock(resource);
-	    AddResource(resource, rezType, (short) rsrcId,
-		(StringPtr) resourceId);
+	    /*
+	     * If we are adding the resource by number, then we must make sure
+	     * there is not already a resource of that number.  We are not going
+	     * load it here, since we want to detect whether we loaded it or
+	     * not.  Remember that releasing some resources in particular menu
+	     * related ones, can be fatal.
+	     */
+	     
+	    if (gotInt == true) {
+	        SetResLoad(false);
+	        resource = Get1Resource(rezType,rsrcId);
+	        SetResLoad(true);
+	    }     
+	    	    
+	    if (resource == NULL) {
+	        /*
+	         * We get into this branch either if there was not already a
+	         * resource of this type & id, or the id was not specified.
+	         */
+	         
+	        resource = NewHandle(length);
+	        if (resource == NULL) {
+	            resource = NewHandleSys(length);
+	            if (resource == NULL) {
+	                panic("could not allocate memory to write resource");
+	            }
+	        }
+	        HLock(resource);
+	        memcpy(*resource, stringPtr, length);
+	        HUnlock(resource);
+	        AddResource(resource, rezType, (short) rsrcId,
+		    (StringPtr) resourceId);
+		releaseIt = 1;
+            } else {
+                /* 
+                 * We got here because there was a resource of this type 
+                 * & ID in the file. 
+                 */ 
+                
+                if (*resource == NULL) {
+                    releaseIt = 1;
+                } else {
+                    releaseIt = 0;
+                }
+               
+                if (!force) {
+                    /*
+                     *We only overwrite extant resources
+                     * when the -force flag has been set.
+                     */
+                     
+                    sprintf(errbuf,"%d", rsrcId);
+                  
+                    Tcl_AppendStringsToObj(resultPtr, "the resource ",
+                          errbuf, " already exists, use \"-force\"",
+                          " to overwrite it.", (char *) NULL);
+                    
+                    result = TCL_ERROR;
+                    goto writeDone;
+                } else if (GetResAttrs(resource) & resProtected) {
+                    /*  
+                     *  
+                     * Next, check to see if it is protected...
+                     */
+                 
+                    sprintf(errbuf,"%d", rsrcId);
+                    Tcl_AppendStringsToObj(resultPtr,
+			    "could not write resource id ",
+                            errbuf, " of type ",
+                            Tcl_GetStringFromObj(objv[i],&length),
+                            ", it was protected.",(char *) NULL);
+                    result = TCL_ERROR;
+                    goto writeDone;
+                } else {
+                    /*
+                     * Be careful, the resource might already be in memory
+                     * if something else loaded it.
+                     */
+                     
+                    if (*resource == 0) {
+                    	LoadResource(resource);
+                    	err = ResError();
+                    	if (err != noErr) {
+                            sprintf(errbuf,"%d", rsrcId);
+                            Tcl_AppendStringsToObj(resultPtr,
+				    "error loading resource ",
+                                    errbuf, " of type ",
+                                    Tcl_GetStringFromObj(objv[i],&length),
+                                    " to overwrite it", (char *) NULL);
+                            goto writeDone;
+                    	}
+                    }
+                     
+                    SetHandleSize(resource, length);
+                    if ( MemError() != noErr ) {
+                        panic("could not allocate memory to write resource");
+                    }
+
+                    HLock(resource);
+	            memcpy(*resource, stringPtr, length);
+	            HUnlock(resource);
+	           
+                    ChangedResource(resource);
+                
+                    /*
+                     * We also may have changed the name...
+                     */ 
+                 
+                    SetResInfo(resource, rsrcId, (StringPtr) resourceId);
+                }
+            }
+            
 	    err = ResError();
 	    if (err != noErr) {
-		SysBeep(1);
+		Tcl_AppendStringsToObj(resultPtr,
+			"error adding resource to resource map",
+		        (char *) NULL);
+		result = TCL_ERROR;
+		goto writeDone;
 	    }
+	    
 	    WriteResource(resource);
 	    err = ResError();
 	    if (err != noErr) {
-		SysBeep(1);
+		Tcl_AppendStringsToObj(resultPtr,
+			"error writing resource to disk",
+		        (char *) NULL);
+		result = TCL_ERROR;
 	    }
-	    ReleaseResource(resource);
-	    err = ResError();
-	    if (err != noErr) {
-		SysBeep(1);
+	    
+	    writeDone:
+	    
+	    if (releaseIt) {
+	        ReleaseResource(resource);
+	        err = ResError();
+	        if (err != noErr) {
+		    Tcl_AppendStringsToObj(resultPtr,
+			    "error releasing resource",
+		            (char *) NULL);
+		    result = TCL_ERROR;
+	        }
 	    }
 	    
 	    if (limitSearch) {
@@ -492,6 +902,7 @@ Tcl_ResourceObjCmd(
 
 	    return result;
 	default:
+	    panic("Tcl_GetIndexFromObject returned unrecognized option");
 	    return TCL_ERROR;	/* Should never be reached. */
     }
 }
@@ -600,7 +1011,6 @@ Tcl_BeepObjCmd(
     Str255 sndName;
     int volume = -1, length;
     char * sndArg = NULL;
-    long curVolume;
 
     resultPtr = Tcl_GetObjResult(interp);
     if (objc == 1) {
@@ -648,29 +1058,48 @@ Tcl_BeepObjCmd(
     }
 	
     /*
-     * Set Volume
-     */
-    if (volume >= 0) {
-	GetSysBeepVolume(&curVolume);
-	SetSysBeepVolume((short) volume);
-    }
-	
-    /*
      * Play the sound
      */
     if (sndArg == NULL) {
+	/*
+         * Set Volume for SysBeep
+         */
+
+	if (volume >= 0) {
+	    SetSoundVolume(volume, SYS_BEEP_VOLUME);
+	}
 	SysBeep(1);
+
+	/*
+         * Reset Volume
+         */
+
+	if (volume >= 0) {
+	    SetSoundVolume(0, RESET_VOLUME);
+	}
     } else {
 	strcpy((char *) sndName + 1, sndArg);
 	sndName[0] = length;
 	sound = GetNamedResource('snd ', sndName);
 	if (sound != NULL) {
-	    SndPlay(NULL, (SndListHandle) sound, false);
-	    return TCL_OK;
-	} else {
+	    /*
+             * Set Volume for Default Output device
+             */
+
 	    if (volume >= 0) {
-		SetSysBeepVolume(curVolume);
+		SetSoundVolume(volume, DEFAULT_SND_VOLUME);
 	    }
+
+	    SndPlay(NULL, (SndListHandle) sound, false);
+
+	    /*
+             * Reset Volume
+             */
+
+	    if (volume >= 0) {
+		SetSoundVolume(0, RESET_VOLUME);
+	    }
+	} else {
 	    Tcl_AppendStringsToObj(resultPtr, " \"", sndArg, 
 		    "\" is not a valid sound.  (Try ",
 		    Tcl_GetStringFromObj(objv[0], (int *) NULL),
@@ -679,17 +1108,107 @@ Tcl_BeepObjCmd(
 	}
     }
 
-    /*
-     * Reset Volume
-     */
-    if (volume >= 0) {
-	SetSysBeepVolume(curVolume);
-    }
     return TCL_OK;
 
     beepUsage:
     Tcl_WrongNumArgs(interp, 1, objv, "[-volume num] [-list | sndName]?");
     return TCL_ERROR;
+}
+
+/*
+ *-----------------------------------------------------------------------------
+ *
+ * SetSoundVolume --
+ *
+ *	Set the volume for either the SysBeep or the SndPlay call depending
+ *	on the value of mode (SYS_BEEP_VOLUME or DEFAULT_SND_VOLUME
+ *      respectively.
+ *
+ *      It also stores the last channel set, and the old value of its 
+ *	VOLUME.  If you call SetSoundVolume with a mode of RESET_VOLUME, 
+ *	it will undo the last setting.  The volume parameter is
+ *      ignored in this case.
+ *
+ * Side Effects:
+ *	Sets the System Volume
+ *
+ * Results:
+ *      None
+ *
+ *-----------------------------------------------------------------------------
+ */
+
+void
+SetSoundVolume(
+    int volume,              /* This is the new volume */
+    enum WhichVolume mode)   /* This flag says which volume to
+			      * set: SysBeep, SndPlay, or instructs us
+			      * to reset the volume */
+{
+    static int hasSM3 = -1;
+    static enum WhichVolume oldMode;
+    static long oldVolume = -1;
+
+    /*
+     * The volume setting calls only work if we have SoundManager
+     * 3.0 or higher.  So we check that here.
+     */
+    
+    if (hasSM3 == -1) {
+    	if (GetToolboxTrapAddress(_SoundDispatch) 
+		!= GetToolboxTrapAddress(_Unimplemented)) {
+	    NumVersion SMVers = SndSoundManagerVersion();
+	    if (SMVers.majorRev > 2) {
+	    	hasSM3 = 1;
+	    } else {
+		hasSM3 = 0;
+	    }
+	} else {
+	    /*
+	     * If the SoundDispatch trap is not present, then
+	     * we don't have the SoundManager at all.
+	     */
+	    
+	    hasSM3 = 0;
+	}
+    }
+    
+    /*
+     * If we don't have Sound Manager 3.0, we can't set the sound volume.
+     * We will just ignore the request rather than raising an error.
+     */
+    
+    if (!hasSM3) {
+    	return;
+    }
+    
+    switch (mode) {
+    	case SYS_BEEP_VOLUME:
+	    GetSysBeepVolume(&oldVolume);
+	    SetSysBeepVolume(volume);
+	    oldMode = SYS_BEEP_VOLUME;
+	    break;
+	case DEFAULT_SND_VOLUME:
+	    GetDefaultOutputVolume(&oldVolume);
+	    SetDefaultOutputVolume(volume);
+	    oldMode = DEFAULT_SND_VOLUME;
+	    break;
+	case RESET_VOLUME:
+	    /*
+	     * If oldVolume is -1 someone has made a programming error
+	     * and called reset before setting the volume.  This is benign
+	     * however, so we will just exit.
+	     */
+	  
+	    if (oldVolume != -1) {	
+	        if (oldMode == SYS_BEEP_VOLUME) {
+	    	    SetSysBeepVolume(oldVolume);
+	        } else if (oldMode == DEFAULT_SND_VOLUME) {
+		    SetDefaultOutputVolume(oldVolume);
+	        }
+	    }
+	    oldVolume = -1;
+    }
 }
 
 /*
@@ -780,8 +1299,10 @@ Tcl_MacEvalResource(
 	result = TCL_ERROR;
     } else {
 	char *sourceStr = NULL;
-	
+
+	HLock(sourceText);
 	sourceStr = Tcl_MacConvertTextResource(sourceText);
+	HUnlock(sourceText);
 	ReleaseResource(sourceText);
 		
 	/*
@@ -841,7 +1362,7 @@ Tcl_MacConvertTextResource(
     int i, size;
     char *resultStr;
 
-    size = SizeResource(resource);
+    size = GetResourceSizeOnDisk(resource);
     
     resultStr = ckalloc(size + 1);
     
@@ -878,7 +1399,7 @@ Handle
 Tcl_MacFindResource(
     Tcl_Interp *interp,		/* Interpreter in which to process file. */
     long resourceType,		/* Type of resource to load. */
-    char *resourceName,		/* Name of resource to source,
+    char *resourceName,		/* Name of resource to find,
 				 * NULL if number should be used. */
     int resourceNumber,		/* Resource id of source. */
     char *resFileRef,		/* Registered resource file reference,
@@ -886,7 +1407,7 @@ Tcl_MacFindResource(
     int *releaseIt)	        /* Should we release this resource when done. */
 {
     Tcl_HashEntry *nameHashPtr;
-    long fileRef;
+    OpenResourceFork *resourceRef;
     int limitSearch = false;
     short saveRef;
     Handle resource;
@@ -898,9 +1419,9 @@ Tcl_MacFindResource(
 			     resFileRef, "\"", (char *) NULL);
 	    return NULL;
 	}
-	fileRef = (long) Tcl_GetHashValue(nameHashPtr);
+	resourceRef = (OpenResourceFork *) Tcl_GetHashValue(nameHashPtr);
 	saveRef = CurResFile();
-	UseResFile((short) fileRef);
+	UseResFile((short) resourceRef->fileRef);
 	limitSearch = true;
     }
 
@@ -922,9 +1443,11 @@ Tcl_MacFindResource(
     } else {
 	c2pstr(resourceName);
 	if (limitSearch) {
-	    resource = Get1NamedResource(resourceType, (StringPtr) resourceName);
+	    resource = Get1NamedResource(resourceType,
+		    (StringPtr) resourceName);
 	} else {
-	    resource = GetNamedResource(resourceType, (StringPtr) resourceName);
+	    resource = GetNamedResource(resourceType,
+		    (StringPtr) resourceName);
 	}
 	p2cstr((StringPtr) resourceName);
     }
@@ -965,41 +1488,15 @@ Tcl_MacFindResource(
 static void
 ResourceInit()
 {
-    Tcl_HashEntry *resourceHashPtr;
-    Tcl_HashEntry *nameHashPtr;
-    long fileRef;
-    char * resourceId;
-    int new;
 
     initialized = 1;
     Tcl_InitHashTable(&nameTable, TCL_STRING_KEYS);
     Tcl_InitHashTable(&resourceTable, TCL_ONE_WORD_KEYS);
+    resourceForkList = Tcl_NewObj();
+    Tcl_IncrRefCount(resourceForkList);
 
-    /*
-     * Place the application resource file into our cache.
-     */
-    fileRef = CurResFile();
-    resourceHashPtr = Tcl_CreateHashEntry(&resourceTable, (char *) fileRef,
-	    &new);
-    resourceId = (char *) ckalloc(strlen("application") + 1);
-    sprintf(resourceId, "application");
-    Tcl_SetHashValue(resourceHashPtr, resourceId);
-
-    nameHashPtr = Tcl_CreateHashEntry(&nameTable, resourceId, &new);
-    Tcl_SetHashValue(nameHashPtr, fileRef);
-
-    /*
-     * Place the system resource file into our cache.
-     */
-    fileRef = 0;
-    resourceHashPtr = Tcl_CreateHashEntry(&resourceTable, (char *) fileRef,
-	    &new);
-    resourceId = (char *) ckalloc(strlen("system") + 1);
-    sprintf(resourceId, "system");
-    Tcl_SetHashValue(resourceHashPtr, resourceId);
-
-    nameHashPtr = Tcl_CreateHashEntry(&nameTable, resourceId, &new);
-    Tcl_SetHashValue(nameHashPtr, fileRef);
+    BuildResourceForkList();
+    
 }
 /***/
 
@@ -1238,4 +1735,431 @@ UpdateStringOfOSType(
     objPtr->bytes = ckalloc(5);
     sprintf(objPtr->bytes, "%-4.4s", &(objPtr->internalRep.longValue));
     objPtr->length = 4;
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * GetRsrcRefFromObj --
+ *
+ *	Given a String object containing a resource file token, return
+ *	the OpenResourceFork structure that it represents, or NULL if 
+ *	the token cannot be found.  If okayOnReadOnly is false, it will 
+ *      also check whether the token corresponds to a read-only file, 
+ *      and return NULL if it is.
+ *
+ * Results:
+ *	A pointer to an OpenResourceFork structure, or NULL.
+ *
+ * Side effects:
+ *	An error message may be left in resultPtr.
+ *
+ *----------------------------------------------------------------------
+ */
+
+static OpenResourceFork *
+GetRsrcRefFromObj(
+    register Tcl_Obj *objPtr,	/* String obj containing file token     */
+    int okayOnReadOnly,         /* Whether this operation is okay for a *
+                                 * read only file.                      */
+    const char *operation,      /* String containing the operation we   *
+                                 * were trying to perform, used for errors */
+    Tcl_Obj *resultPtr)         /* Tcl_Obj to contain error message     */
+{
+    char *stringPtr;
+    Tcl_HashEntry *nameHashPtr;
+    OpenResourceFork *resourceRef;
+    int length;
+    OSErr err;
+    
+    stringPtr = Tcl_GetStringFromObj(objPtr, &length);
+    nameHashPtr = Tcl_FindHashEntry(&nameTable, stringPtr);
+    if (nameHashPtr == NULL) {
+        Tcl_AppendStringsToObj(resultPtr,
+	        "invalid resource file reference \"",
+	        stringPtr, "\"", (char *) NULL);
+        return NULL;
+    }
+
+    resourceRef = (OpenResourceFork *) Tcl_GetHashValue(nameHashPtr);
+    
+    if (!okayOnReadOnly) {
+        err = GetResFileAttrs((short) resourceRef->fileRef);
+        if (err & mapReadOnly) {
+            Tcl_AppendStringsToObj(resultPtr, "cannot ", operation, 
+                    " resource file \"",
+                    stringPtr, "\", it was opened read only",
+                    (char *) NULL);
+            return NULL;
+        }
+    }
+    return resourceRef;
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * TclMacRegisterResourceFork --
+ *
+ *	Register an open resource fork in the table of open resources 
+ *	managed by the procedures in this file.  If the resource file
+ *      is already registered with the table, then no new token is made.
+ *
+ *      The bahavior is controlled by the value of tokenPtr, and of the 
+ *	flags variable.  For tokenPtr, the possibilities are:
+ *	  - NULL: The new token is auto-generated, but not returned.
+ *        - The string value of tokenPtr is the empty string: Then
+ *		the new token is auto-generated, and returned in tokenPtr
+ *	  - tokenPtr has a value: The string value will be used for the token,
+ *		unless it is already in use, in which case a new token will
+ *		be generated, and returned in tokenPtr.
+ *
+ *      For the flags variable:  it can be one of:
+ *	  - TCL_RESOURCE__INSERT_TAIL: The element is inserted at the
+ *              end of the list of open resources.  Used only in Resource_Init.
+ *	  - TCL_RESOURCE_DONT_CLOSE: The resource close command will not close
+ *	        this resource.
+ *	  - TCL_RESOURCE_CHECK_IF_OPEN: This will check to see if this file's
+ *	        resource fork is already opened by this Tcl shell, and return 
+ *	        an error without registering the resource fork.
+ *
+ * Results:
+ *	Standard Tcl Result
+ *
+ * Side effects:
+ *	An entry is added to the resource name table.
+ *
+ *----------------------------------------------------------------------
+ */
+
+int
+TclMacRegisterResourceFork(
+    short fileRef,        	/* File ref for an open resource fork. */
+    Tcl_Obj *tokenPtr,		/* A Tcl Object to which to write the  *
+				 * new token */
+    int flags)	     		/* 1 means insert at the head of the resource
+                                 * fork list, 0 means at the tail */
+
+{
+    Tcl_HashEntry *resourceHashPtr;
+    Tcl_HashEntry *nameHashPtr;
+    OpenResourceFork *resourceRef;
+    int new;
+    char *resourceId = NULL;
+   
+    if (!initialized) {
+        ResourceInit();
+    }
+    
+    /*
+     * If we were asked to, check that this file has not been opened
+     * already.
+     */
+     
+    if (flags & TCL_RESOURCE_CHECK_IF_OPEN) {
+        Tcl_HashSearch search;
+        short oldFileRef;
+        FCBPBRec newFileRec, oldFileRec;
+        OSErr err;
+        
+        oldFileRec.ioCompletion = NULL;
+        oldFileRec.ioFCBIndx = 0;
+        oldFileRec.ioNamePtr = NULL;
+        
+        newFileRec.ioCompletion = NULL;
+        newFileRec.ioFCBIndx = 0;
+        newFileRec.ioNamePtr = NULL;
+        newFileRec.ioVRefNum = 0;
+        newFileRec.ioRefNum = fileRef;
+        err = PBGetFCBInfo(&newFileRec, false);
+            
+        
+        resourceHashPtr = Tcl_FirstHashEntry(&resourceTable, &search);
+        while (resourceHashPtr != NULL) {
+            
+            oldFileRef = (short) Tcl_GetHashKey(&resourceTable,
+                    resourceHashPtr);
+            
+            
+            oldFileRec.ioVRefNum = 0;
+            oldFileRec.ioRefNum = oldFileRef;
+            err = PBGetFCBInfo(&oldFileRec, false);
+            
+            /*
+             * err might not be noErr either because the file has closed 
+             * out from under us somehow, which is bad but we're not going
+             * to fix it here, OR because it is the ROM MAP, which has a 
+             * fileRef, but can't be gotten to by PBGetFCBInfo.
+             */
+             
+            if ((oldFileRef == fileRef) ||
+                    ((err == noErr) 
+                    && (newFileRec.ioFCBVRefNum == oldFileRec.ioFCBVRefNum)
+                    && (newFileRec.ioFCBFlNm == oldFileRec.ioFCBFlNm))) {
+                
+                resourceId = (char *) Tcl_GetHashValue(resourceHashPtr);
+		Tcl_SetStringObj(tokenPtr, resourceId, -1);
+                return TCL_OK;
+            }
+            
+            resourceHashPtr = Tcl_NextHashEntry(&search);
+        }
+        
+        
+    }
+    
+    resourceHashPtr = Tcl_CreateHashEntry(&resourceTable,
+		(char *) fileRef, &new);
+    if (!new) {
+        if (tokenPtr != NULL) {
+            resourceId = (char *) Tcl_GetHashValue(resourceHashPtr);
+            Tcl_SetStringObj(tokenPtr, resourceId, -1);
+        }
+        return  TCL_OK;
+    }
+    
+    
+    /*
+     * If we were passed in a result pointer which is not an empty
+     * string, attempt to use that as the key.  If the key already
+     * exists, silently fall back on resource%d...
+     */
+     
+    if (tokenPtr != NULL) {
+        char *tokenVal;
+        int length;
+        tokenVal = (char *) Tcl_GetStringFromObj(tokenPtr, &length);
+        if (length > 0) {
+            nameHashPtr = Tcl_FindHashEntry(&nameTable, tokenVal);
+            if (nameHashPtr == NULL) {
+                resourceId = ckalloc(length + 1);
+                memcpy(resourceId, tokenVal, length);
+                resourceId[length] = '\0';
+            }
+        }
+    }
+    
+    if (resourceId == NULL) {	
+        resourceId = (char *) ckalloc(15);
+        sprintf(resourceId, "resource%d", newId);
+    }
+    
+    Tcl_SetHashValue(resourceHashPtr, resourceId);
+    newId++;
+
+    nameHashPtr = Tcl_CreateHashEntry(&nameTable, resourceId, &new);
+    if (!new) {
+	panic("resource id has repeated itself");
+    }
+    
+    resourceRef = (OpenResourceFork *) ckalloc(sizeof(OpenResourceFork));
+    resourceRef->fileRef = fileRef;
+    resourceRef->flags = flags;
+    
+    Tcl_SetHashValue(nameHashPtr, (ClientData) resourceRef);
+    if (tokenPtr != NULL) {
+        Tcl_SetStringObj(tokenPtr, resourceId, -1);
+    }
+    
+    if (flags & TCL_RESOURCE_INSERT_TAIL) {
+        Tcl_ListObjAppendElement(NULL, resourceForkList, tokenPtr);
+    } else {
+        Tcl_ListObjReplace(NULL, resourceForkList, 0, 0, 1, &tokenPtr);	
+    }
+    return TCL_OK;
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * TclMacUnRegisterResourceFork --
+ *
+ *	Removes the entry for an open resource fork from the table of 
+ *	open resources managed by the procedures in this file.
+ *      If resultPtr is not NULL, it will be used for error reporting.
+ *
+ * Results:
+ *	The fileRef for this token, or -1 if an error occured.
+ *
+ * Side effects:
+ *	An entry is removed from the resource name table.
+ *
+ *----------------------------------------------------------------------
+ */
+
+short
+TclMacUnRegisterResourceFork(
+    char *tokenPtr,
+    Tcl_Obj *resultPtr)
+
+{
+    Tcl_HashEntry *resourceHashPtr;
+    Tcl_HashEntry *nameHashPtr;
+    OpenResourceFork *resourceRef;
+    char *resourceId = NULL;
+    short fileRef;
+    char *bytes;
+    int i, match, index, listLen, length, elemLen;
+    Tcl_Obj **elemPtrs;
+    
+     
+    nameHashPtr = Tcl_FindHashEntry(&nameTable, tokenPtr);
+    if (nameHashPtr == NULL) {
+        if (resultPtr != NULL) {
+	    Tcl_AppendStringsToObj(resultPtr,
+		    "invalid resource file reference \"",
+		    tokenPtr, "\"", (char *) NULL);
+        }
+	return -1;
+    }
+    
+    resourceRef = (OpenResourceFork *) Tcl_GetHashValue(nameHashPtr);
+    fileRef = resourceRef->fileRef;
+        
+    if ( resourceRef->flags & TCL_RESOURCE_DONT_CLOSE ) {
+        if (resultPtr != NULL) {
+	    Tcl_AppendStringsToObj(resultPtr,
+		    "can't close \"", tokenPtr, "\" resource file", 
+		    (char *) NULL);
+	}
+	return -1;
+    }            
+
+    Tcl_DeleteHashEntry(nameHashPtr);
+    ckfree((char *) resourceRef);
+    
+    
+    /* 
+     * Now remove the resource from the resourceForkList object 
+     */
+     
+    Tcl_ListObjGetElements(NULL, resourceForkList, &listLen, &elemPtrs);
+    
+ 
+    index = -1;
+    length = strlen(tokenPtr);
+    
+    for (i = 0; i < listLen; i++) {
+	match = 0;
+	bytes = Tcl_GetStringFromObj(elemPtrs[i], &elemLen);
+	if (length == elemLen) {
+		match = (memcmp(bytes, tokenPtr,
+			(size_t) length) == 0);
+	}
+	if (match) {
+	    index = i;
+	    break;
+	}
+    }
+    if (!match) {
+        panic("the resource Fork List is out of synch!");
+    }
+    
+    Tcl_ListObjReplace(NULL, resourceForkList, index, 1, 0, NULL);
+    
+    resourceHashPtr = Tcl_FindHashEntry(&resourceTable, (char *) fileRef);
+    
+    if (resourceHashPtr == NULL) {
+	panic("Resource & Name tables are out of synch in resource command.");
+    }
+    ckfree(Tcl_GetHashValue(resourceHashPtr));
+    Tcl_DeleteHashEntry(resourceHashPtr);
+    
+    return fileRef;
+
+}
+
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * BuildResourceForkList --
+ *
+ *	Traverses the list of open resource forks, and builds the 
+ *	list of resources forks.  Also creates a resource token for any that 
+ *      are opened but not registered with our resource system.
+ *      This is based on code from Apple DTS.
+ *
+ * Results:
+ *	None.
+ *
+ * Side effects:
+ *      The list of resource forks is updated.
+ *	The resource name table may be augmented.
+ *
+ *----------------------------------------------------------------------
+ */
+
+void
+BuildResourceForkList()
+{
+    Handle currentMapHandle, mSysMapHandle;  
+    Ptr tempPtr;
+    FCBPBRec fileRec;
+    char fileName[256];
+    char appName[62];
+    Tcl_Obj *nameObj;
+    OSErr err;
+    ProcessSerialNumber psn;
+    ProcessInfoRec info;
+    FSSpec fileSpec;
+        
+    /* 
+     * Get the application name, so we can substitute
+     * the token "application" for the application's resource.
+     */ 
+     
+    GetCurrentProcess(&psn);
+    info.processInfoLength = sizeof(ProcessInfoRec);
+    info.processName = (StringPtr) &appName;
+    info.processAppSpec = &fileSpec;
+    GetProcessInformation(&psn, &info);
+    p2cstr((StringPtr) appName);
+
+    
+    fileRec.ioCompletion = NULL;
+    fileRec.ioVRefNum = 0;
+    fileRec.ioFCBIndx = 0;
+    fileRec.ioNamePtr = (StringPtr) &fileName;
+    
+    
+    currentMapHandle = LMGetTopMapHndl();
+    mSysMapHandle = LMGetSysMapHndl();
+    
+    while (1) {
+        /* 
+         * Now do the ones opened after the application.
+         */
+       
+        nameObj = Tcl_NewObj();
+        
+        tempPtr = *currentMapHandle;
+
+        fileRec.ioRefNum = *((short *) (tempPtr + 20));
+        err = PBGetFCBInfo(&fileRec, false);
+        
+        if (err != noErr) {
+            /*
+             * The ROM resource map does not correspond to an opened file...
+             */
+             Tcl_SetStringObj(nameObj, "ROM Map", -1);
+        } else {
+            p2cstr((StringPtr) fileName);
+            if (strcmp(fileName,(char *) appName) == 0) {
+                Tcl_SetStringObj(nameObj, "application", -1);
+            } else {
+                Tcl_SetStringObj(nameObj, fileName, -1);
+            }
+            c2pstr(fileName);
+        }
+        
+        TclMacRegisterResourceFork(fileRec.ioRefNum, nameObj, 
+            TCL_RESOURCE_DONT_CLOSE | TCL_RESOURCE_INSERT_TAIL);
+       
+        if (currentMapHandle == mSysMapHandle) {
+            break;
+        }
+        
+        currentMapHandle = *((Handle *) (tempPtr + 16));
+    }
 }

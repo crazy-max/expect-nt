@@ -437,6 +437,7 @@ typedef struct TclWinReaderInfo {
 EXTERN TclWinReaderInfo * TclWinReaderNew(HANDLE postWin, DWORD postMsg,
 			    HANDLE file);
 EXTERN void		TclWinReaderFree(TclWinReaderInfo *infoPtr);
+EXTERN int		TclWinReaderDestroy(TclWinReaderInfo *infoPtr);
 EXTERN int		TclWinReaderInput(TclWinReaderInfo *infoPtr, char *buf,
 			    int bufSize, int *errorCode);
 EXTERN int		TclWinReaderStart(TclWinReaderInfo *infoPtr,

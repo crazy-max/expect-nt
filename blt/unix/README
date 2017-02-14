@@ -1,0 +1,101 @@
+===========
+unix/README
+===========
+
+To build BLT 8.x-unoff for Unix systems, please follow these instructions:
+
+- make sure you have already configured and compiled Tcl and Tk 8.x (you can
+  get them from ftp://ftp.smli.com/pub/tcl); it's not necessary to install
+  Tcl/Tk 8.x on your system in order to build BLT
+
+- create a subdirectory in this ("unix") directory which should reflect
+  the name of your particular OS (e.g., "mkdir Linux"; type "uname -s"
+  to see how your OS calls itself); see [1] below for what you have to
+  do if you prefer a different configuration directory
+  
+- "cd" to this directory
+
+- type "../configure" (you may add some options to this command; please
+  type "../configure --help" for a list of all available options, but in
+  most cases it's sufficient to just run "configure" w/out any additional
+  parameters)
+
+- if necessary, edit "./config.BLT" and fix the path names for
+  {TCL,TK,X}{INC,LIB}DIR, the compiler to use ("CC") and its flags ("CFLAGS")
+
+- if you have changed "./config.BLT", type "../configure" again (add the
+  same options to "configure" as in the first pass!); this will update the
+  "Makefile"s
+
+- type "make"; this will build the shared and static libraries and
+  the executable "bltwish"; if this step fails, please send a bug
+  report to mike@hightec.saarlink.de (please try to be as precisely as
+  possible, as it's likely that I don't have access to your machine/OS
+  combo and therefore can't reproduce the error you're reporting)
+
+- type "cd ../../demos" and try out the demo scripts; if your BLT
+  configuration directory differs from "unix/`uname -s`", you should
+  first issue the command "export BLT_CONFDIR=xxx", where "xxx" is the
+  absolute path name of your configuration directory (the name and syntax of
+  this command depends on the shell you're using: if you're using "csh",
+  try "setenv BLT_CONFDIR xxx"; type "BLT_CONFDIR=xxx; export BLT_CONFDIR"
+  for antique "sh"s)
+
+- if the demos seem to work, the final step is to type "make install"
+  (note that you usually need "root" privileges to install BLT); however,
+  this step is optional: "../demos/myblt" shows how you can run "bltwish"
+  w/out installing it; and of course you can "load" "libBLT*.so" into "wish"
+  if your system supports shared libraries
+
+
+All BLT commands should work under Unix/X11 as advertised, i.e., as
+documented in the manual pages.
+
+If you have installed an older version of Tcl/Tk on your system, it may
+happen that you get "unresolved external" errors when linking "bltwish".
+If this happens, then the linker uses the installed libraries instead of
+those found by autoconf. To fix this, edit the "Makefile" in BLT's
+configuration directory, search for a line that reads similar to
+   STD_LIBS     = -L/.../unix -ltk8.0 -L/.../unix -ltcl8.0 ...
+Change this like so:
+   STD_LIBS     = /.../unix/libtk8.0.so /.../unix/libtcl8.0.so ...
+If you didn't build the shared libraries, the extension will be ".a"
+instead of ".so", and on some systems the ".so" extension will be
+something like ".so.1.0". The "trick" is to specify the Tcl and Tk
+libraries literally (with full path name), so that the linker won't
+search them in system-specific directories (e.g., /usr/X11R6/lib).
+
+Some native compilers (e.g., IBM's xlc) can't compile BLT, because
+their parsers are too restrictive for ANSI-C code. In this case, I
+suggest getting a copy of gcc and configuring BLT with "--with-cc=gcc".
+
+
+Good luck & have fun,
+mike
+
+-------
+[1]
+  You can also build BLT directly in the "unix" directory (just type
+  "./configure" instead of "../configure"), but I think it's generally
+  better to create a subdirectory as described above.
+
+  If you can't (or don't want to) configure and build BLT in its "unix"
+  directory or a subdirectory thereof, you can as well choose an arbitrary
+  directory: just "mkdir" and "cd" to it; then type "path/to/configure".
+  This script tries to automagically locate the newest (in terms of "version
+  number" [2], not "time stamp") Tcl/Tk headers and libraries. It will succeed
+  if you've unpacked the Tcl, Tk and BLT distributions in a common subdirectory
+  and if you have built Tcl and Tk either in their "unix" directories or in
+  a subdirectory of "unix" which has the same name as your chosen BLT
+  configuration directory (typically the result of "uname -s", but you're
+  free to choose an arbitrary name, as `basename $(pwd)` is examined, too).
+  It will also succeed if your Tcl, Tk and BLT configuration directories
+  are located in a common subdirectory and/or if TCL_LIBRARY is set correctly.
+  Confused? Well, you might want to read "unix/configure.in" then; the search
+  algorithm is implemented near the beginning of this script. If "configure"
+  can't auto-find the headers and libraries - Don't Panic! (tm)  Just edit
+  "config.BLT" and re-run "configure" as described above.
+
+[2]
+  e.g., 8.0p2 > 8.0 > 8.0b1 > 8.0a2 (and, of course, 8.1* > 8.0*)
+

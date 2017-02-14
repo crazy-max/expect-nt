@@ -1,0 +1,54 @@
+#the makefile must define
+#	ROOT
+#	DLL_OBJS
+#	THIS
+#	DLL_VER
+
+DUMPEXTS=$(TCLDIR)\win\dumpexts.exe
+DUMPEXTSOBJS=$(OBJDIR)\winDumpExts.obj
+DLL_LIB=$(WINDIR)\$(THIS)$(DLL_VER).lib
+DLL_DLL=$(WINDIR)\$(THIS)$(DLL_VER).dll
+DLL_EXP=$(WINDIR)\$(THIS)$(DLL_VER).exp
+DLL_PDB=$(WINDIR)\$(THIS)$(DLL_VER).pdb
+DLL_ILK=$(WINDIR)\$(THIS)$(DLL_VER).ilk
+DLL_DEF=$(OBJDIR)\$(THIS)vc.def
+DLL_RES=$(OBJDIR)\$(THIS)$(DLL_VER).res
+
+guilflags	= -subsystem:windows -entry:WinMainCRTStartup
+winlibs		= msvcrt.lib oldnames.lib \
+		  kernel32.lib advapi32.lib user32.lib gdi32.lib \
+		  comdlg32.lib winspool.lib
+#guilibsdll	= msvcrt.lib oldnames.lib $(winlibs)
+lcommon		= /NODEFAULTLIB /RELEASE /NOLOGO /MACHINE:IX86
+dllflags	= $(lcommon) -align:0x1000
+
+all:	$(DLL_DLL) $(BLTWISH)
+
+$(DUMPEXTS): $(TCLDIR)\win\winDumpExts.c
+	$(cc) $(cdebug) $(cflags) $(cvars) $(TCL_INCLUDES) \
+		$(TCL_DEFINES) -Fo$(OBJDIR)\ $?
+	$(link) $(conlflags) -out:$(DUMPEXTS) $(DUMPEXTSOBJS) $(guilibs) $(libc)
+	-@(RM) $(DUMPEXTSOBJS)
+
+$(DLL_DEF): $(DUMPEXTS) $(DLL_OBJS)
+	$(DUMPEXTS) -o $@ $(DLL_DLL) @<<
+	$(DLL_OBJS)
+<<
+
+
+$(DLL_DLL): $(DLL_OBJS) $(DLL_RES) $(DLL_DEF) $(DLL_LIBS)
+	$(link) $(linkdebug) $(dllflags) -def:$(DLL_DEF) \
+		$(DLL_RES) -out:$(DLL_DLL) $(TKLIB) $(TCLLIB) \
+	@<<
+	$(DLL_LIBS) $(DLL_EXTRALIBS) $(guilibsdll)
+	$(DLL_OBJS)
+<<
+
+$(DLL_RES): $(THIS).rc
+	$(rc) /r /Fo$@ $?
+
+$(BLTWISH): $(WISH_OBJS) $(DLL_LIB) $(DLL_RES)
+	set LIB=$(TOOLS32)\lib
+	$(link32) $(linkdebug) $(lcommon) $(guilflags) $(DLL_RES) -out:$@ \
+	  $(DLL_LIB) $(WISH_OBJS) $(winlibs) $(TKLIB) $(TCLLIB)
+

@@ -1,0 +1,28 @@
+#!/bin/sh
+################################################################################
+#
+# This is a simple shell script to test BLT's bgexec command. It simply
+# outputs the current date every second and increments a variable on
+# each step, which is then written to stderr. When called from the "bgexec"
+# demo script, the output to stdout will appear in the text widget, and
+# clicking on the "stop" button will display the output to stderr in the
+# text widget, too. The script automatically terminates when the loop is
+# executed for the 10th time, which will cause the same action as if you had
+# clicked on the "stop" button.
+#
+# Created on 23FEB97 by Michael Schumacher (mike@hightec.saarlink.de)
+#
+################################################################################
+
+i=0
+while true
+do
+  echo "#$i: `date`"
+  echo $i >& 2
+  i=`expr $i + 1`
+  sleep 1
+  if `test $i -ge 6`
+  then
+    exit 42
+  fi
+done

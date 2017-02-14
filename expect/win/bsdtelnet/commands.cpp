@@ -35,7 +35,7 @@
  * From: @(#)commands.c	5.5 (Berkeley) 3/22/91
  */
 char cmd_rcsid[] = 
-  "$Id: commands.cpp,v 1.1.1.1 1997/08/13 05:39:36 chaffee Exp $";
+  "$Id: commands.cpp,v 1.2 1998/04/25 06:26:21 chaffee Exp $";
 
 #ifdef __WIN32__
 #include <windows.h>
@@ -1812,7 +1812,7 @@ int tn(int argc, const char *argv[]) {
 	if (sp == 0) {
 	    sp = getservbyname("telnet", "tcp");
 	    if (sp == 0) {
-		fprintf(stderr, "telnet: tcp/telnet: unknown service\n");
+		wsa_perror("telnet: tcp/telnet: unknown service");
 #ifndef __WIN32__
 	        setuid(getuid());
 #endif
@@ -2097,6 +2097,14 @@ static int help(command_table *tab, int argc, const char *argv[]) {
 
 static char *rcname = 0;
 static char rcbuf[128];
+static int telnetrc = 1;
+
+void setrcname(const char *rc) {
+    rcbuf[sizeof(rcbuf)-1] = 0;
+    strncpy(rcbuf, rc, sizeof(rcbuf)-1);
+    rcname = rcbuf;
+    telnetrc = 0;
+}
 
 void cmdrc(const char *m1, const char *m2) {
     FILE *rcfile;
@@ -2128,24 +2136,26 @@ void cmdrc(const char *m1, const char *m2) {
 	    break;
 	if (line[0] == '#')
 	    continue;
-	if (gotmachine) {
-	    if (!isspace(line[0]))
-		gotmachine = 0;
-	}
-	if (gotmachine == 0) {
-	    if (isspace(line[0]))
-		continue;
-	    if (strncasecmp(line, m1, l1) == 0)
-		strncpy(line, &line[l1], sizeof(line) - l1);
-	    else if (strncasecmp(line, m2, l2) == 0)
-		strncpy(line, &line[l2], sizeof(line) - l2);
-	    else if (strncasecmp(line, "DEFAULT", 7) == 0)
-		strncpy(line, &line[7], sizeof(line) - 7);
-	    else
-		continue;
-	    if (line[0] != ' ' && line[0] != '\t' && line[0] != '\n')
-		continue;
-	    gotmachine = 1;
+	if (telnetrc) {
+	    if (gotmachine) {
+		if (!isspace(line[0]))
+		    gotmachine = 0;
+	    }
+	    if (gotmachine == 0) {
+		if (isspace(line[0]))
+		    continue;
+		if (strncasecmp(line, m1, l1) == 0)
+		    strncpy(line, &line[l1], sizeof(line) - l1);
+		else if (strncasecmp(line, m2, l2) == 0)
+		    strncpy(line, &line[l2], sizeof(line) - l2);
+		else if (strncasecmp(line, "DEFAULT", 7) == 0)
+		    strncpy(line, &line[7], sizeof(line) - 7);
+		else
+		    continue;
+		if (line[0] != ' ' && line[0] != '\t' && line[0] != '\n')
+		    continue;
+		gotmachine = 1;
+	    }
 	}
 	makeargv();
 	if (margv[0] == 0)

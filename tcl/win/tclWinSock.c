@@ -8,7 +8,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclWinSock.c 1.79 97/06/20 14:15:47
+ * SCCS: @(#) tclWinSock.c 1.80 97/10/09 18:24:59
  */
 
 #include "tclInt.h"
@@ -670,6 +670,7 @@ SocketEventProc(evPtr, flags)
 	 * could have consumed the data in the meantime.
 	 */
 
+	nBytes = 0;
 	status = (*winSock.ioctlsocket)(infoPtr->socket, FIONREAD,
 		&nBytes);
 	if (status != SOCKET_ERROR && nBytes > 0) {
@@ -1983,8 +1984,9 @@ SocketProc(hwnd, message, wParam, lParam)
  *	Returns the name of the local host.
  *
  * Results:
- *	Returns a string containing the host name, or NULL on error.
- *	The returned string must be freed by the caller.
+ *	A string containing the network name for this machine, or
+ *	an empty string if we can't figure out the name.  The caller 
+ *	must not modify or free this string.
  *
  * Side effects:
  *	None.
@@ -1995,18 +1997,31 @@ SocketProc(hwnd, message, wParam, lParam)
 char *
 Tcl_GetHostName()
 {
-    if (TclHasSockets(NULL) != TCL_OK) {
-	return "";
-    }
+    DWORD length;
+    char *p;
 
     if (hostnameInitialized) {
         return hostname;
     }
-    if ((*winSock.gethostname)(hostname, 100) == 0) {
-        hostnameInitialized = 1;
-        return hostname;
+
+    if (TclHasSockets(NULL) == TCL_OK) {
+	if ((*winSock.gethostname)(hostname, sizeof(hostname)) == 0) {
+	    hostnameInitialized = 1;
+	    return hostname;
+	}
     }
-    return (char *) NULL;
+    length = sizeof(hostname);
+    if (GetComputerName(hostname, &length) != 0) {
+	for (p = hostname; *p != '\0'; p++) {
+	    if (isupper(*((unsigned char *) p))) {
+		*p = (char) tolower(*((unsigned char *) p));
+	    }
+	}
+    } else {
+	hostname[0] = '\0';
+    }
+    hostnameInitialized = 1;
+    return hostname;
 }
 
 /*

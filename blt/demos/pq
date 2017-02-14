@@ -1,0 +1,13 @@
+#!/bin/sh
+################################################################################
+#
+# This is a simple "replacement" script for the "pq" DBMS, which allows you
+# to try out the "xpq" example. Please rename or delete this script, should
+# you have "pq" installed on your system.
+#
+# Created on 09MAR97 by Michael Schumacher (mike@hightec.saarlink.de)
+#
+################################################################################
+
+sleep 5
+exit 1

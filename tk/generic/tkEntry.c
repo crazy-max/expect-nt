@@ -11,7 +11,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkEntry.c 1.110 97/07/31 09:06:38
+ * SCCS: @(#) tkEntry.c 1.112 97/11/06 16:56:16
  */
 
 #include "tkInt.h"
@@ -158,13 +158,15 @@ typedef struct {
  *				focus.
  * UPDATE_SCROLLBAR:		Non-zero means scrollbar should be updated
  *				during next redisplay operation.
+ * GOT_SELECTION:		Non-zero means we've claimed the selection.
  */
 
 #define REDRAW_PENDING		1
 #define BORDER_NEEDED		2
 #define CURSOR_ON		4
 #define GOT_FOCUS		8
-#define UPDATE_SCROLLBAR	16
+#define UPDATE_SCROLLBAR	0x10
+#define GOT_SELECTION		0x20
 
 /*
  * The following macro defines how many extra pixels to leave on each
@@ -710,17 +712,14 @@ EntryWidgetCmd(clientData, interp, argc, argv)
 	    if (index >= index2) {
 		entryPtr->selectFirst = entryPtr->selectLast = -1;
 	    } else {
-		if ((entryPtr->selectFirst == -1)
-			&& (entryPtr->exportSelection)) {
-		    Tk_OwnSelection(entryPtr->tkwin, XA_PRIMARY, 
-			    EntryLostSelection, (ClientData) entryPtr);
-		}
 		entryPtr->selectFirst = index;
 		entryPtr->selectLast = index2;
 	    }
-	    if ((entryPtr->selectFirst == -1) && (entryPtr->exportSelection)) {
-		Tk_OwnSelection(entryPtr->tkwin, XA_PRIMARY,
+	    if (!(entryPtr->flags & GOT_SELECTION)
+		    && (entryPtr->exportSelection)) {
+		Tk_OwnSelection(entryPtr->tkwin, XA_PRIMARY, 
 			EntryLostSelection, (ClientData) entryPtr);
+		entryPtr->flags |= GOT_SELECTION;
 	    }
 	    EventuallyRedraw(entryPtr);
 	} else if ((c == 't') && (strncmp(argv[2], "to", length) == 0)) {
@@ -952,9 +951,11 @@ ConfigureEntry(interp, entryPtr, argc, argv, flags)
      */
 
     if (entryPtr->exportSelection && (!oldExport)
-	    && (entryPtr->selectFirst != -1)) {
+	    && (entryPtr->selectFirst != -1)
+	    && !(entryPtr->flags & GOT_SELECTION)) {
 	Tk_OwnSelection(entryPtr->tkwin, XA_PRIMARY, EntryLostSelection,
 		(ClientData) entryPtr);
+	entryPtr->flags |= GOT_SELECTION;
     }
 
     /*
@@ -1003,6 +1004,9 @@ EntryWorldChanged(instanceData)
     entryPtr = (Entry *) instanceData;
 
     entryPtr->avgWidth = Tk_TextWidth(entryPtr->tkfont, "0", 1);
+    if (entryPtr->avgWidth == 0) {
+	entryPtr->avgWidth = 1;
+    }
 
     gcValues.foreground = entryPtr->fgColorPtr->pixel;
     gcValues.font = Tk_FontId(entryPtr->tkfont);
@@ -1897,9 +1901,10 @@ EntrySelectTo(entryPtr, index)
      * Grab the selection if we don't own it already.
      */
 
-    if ((entryPtr->selectFirst == -1) && (entryPtr->exportSelection)) {
+    if (!(entryPtr->flags & GOT_SELECTION) && (entryPtr->exportSelection)) {
 	Tk_OwnSelection(entryPtr->tkwin, XA_PRIMARY, EntryLostSelection,
 		(ClientData) entryPtr);
+	entryPtr->flags |= GOT_SELECTION;
     }
 
     /*
@@ -2008,6 +2013,8 @@ EntryLostSelection(clientData)
     ClientData clientData;		/* Information about entry widget. */
 {
     Entry *entryPtr = (Entry *) clientData;
+
+    entryPtr->flags &= ~GOT_SELECTION;
 
     /*
      * On Windows and Mac systems, we want to remember the selection

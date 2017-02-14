@@ -9,7 +9,7 @@
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 #
-# RCS: $Header: /disk/3/CVSROOT/Mitel/expect/win/tests/trap.test,v 1.1 1997/11/13 12:16:36 chaffee Exp $
+# RCS: $Header: /disk/3/CVSROOT/Mitel/expect/win/tests/trap.test,v 1.2 1998/08/28 22:29:52 chaffee Exp $
 
 if {[string compare test [info procs test]] == 1} then {source defs}
 
@@ -18,9 +18,11 @@ catch {unset x}
 
 # Basic trap tests.
 
+set timeout 10
 test trap-1.1 {trap SIGQUIT} {
     if [catch {
-	global ok 0
+	global ok
+	set ok 0
 	spawn expect.exe trap.tcl
 
 	# Wait for process to get started
@@ -84,7 +86,8 @@ test trap-1.2 {trap SIGINT} {
 
 test trap-1.3 {trap SIGQUIT with spawned telnet} {
     if [catch {
-	global ok 0
+	global ok
+	set ok 0
 	spawn expect.exe trap2.tcl
 
 	# Wait for the spawned telnet in trap2.tcl to get connected
@@ -98,6 +101,7 @@ test trap-1.3 {trap SIGQUIT with spawned telnet} {
 	}
 	# Make sure the telnet has closed
 	after 5000
+	set ok 1
     } msg] {} else {set msg $ok}
     catch {close}
     catch {wait}

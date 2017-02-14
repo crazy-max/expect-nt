@@ -8,7 +8,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclMacInit.c 1.37 97/08/13 16:54:24
+ * SCCS: @(#) tclMacInit.c 1.39 97/09/23 13:17:30
  */
 
 #include <Files.h>
@@ -176,6 +176,15 @@ Tcl_Init(
 	    source [info library]:history.tcl\n\
 	} else {\n\
 	    set msg \"can't find History resource or [info library]:history.tcl;\"\n\
+	    append msg \" perhaps you need to\\ninstall Tcl or set your \"\n\
+	    append msg \"TCL_LIBRARY environment variable?\"\n\
+	    error $msg\n\
+	}\n}\n\
+        if {[catch {source -rsrc Word}] != 0} {\n\
+	if [file exists [info library]:word.tcl] {\n\
+	    source [info library]:word.tcl\n\
+	} else {\n\
+	    set msg \"can't find Word resource or [info library]:word.tcl;\"\n\
 	    append msg \" perhaps you need to\\ninstall Tcl or set your \"\n\
 	    append msg \"TCL_LIBRARY environment variable?\"\n\
 	    error $msg\n\

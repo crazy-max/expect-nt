@@ -1,0 +1,25 @@
+#!/bin/sh ./myblt
+
+source bltDemo.tcl
+
+proc explode { w interval } {
+  foreach { name val } [$w get] {
+    lappend elems $name
+  }
+  set exp [$w cget -explode]
+  set idx [lsearch -exact $elems $exp]
+  set idx [expr ($idx + 1) % [llength $elems]]
+  $w configure -explode [lindex $elems $idx]
+  after $interval "explode $w $interval"
+}
+
+pack [piechart .pie] -fill both -expand 1
+.pie set Welfare 3 Military 7 Transport 1 Parks 1 Schools 2 Debt 4
+.pie configure  -title PieChart -textwidth 200 \
+    -explode Schools -explodewidth 20 \
+    -textcolor black \
+    -background gray75 \
+    -borderwidth 3 \
+    -radius 75
+wm geometry . 430x205
+explode .pie 1000

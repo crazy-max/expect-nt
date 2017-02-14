@@ -1,0 +1,35 @@
+# ------------------------------------------------------------------------
+# 	Makefile for library files and directories of BLT library
+# ------------------------------------------------------------------------
+
+INSTALL      = @INSTALL@
+INSTALL_DATA = @INSTALL_DATA@
+TOPDIR       = @DESTDIR@
+LIBDIR       = @LIBDIR@
+BLT_LIBRARY  = @BLT_LIBRARY@
+DDPROTO_DIR  = $(BLT_LIBRARY)/dd_protocols
+RM           = rm -f
+SHELL        = /bin/sh
+FILES        = bltGraph.pro bltGraph.tcl tclIndex
+srcdir	     = @srcdir@/../../library
+
+all:
+
+install-dirs:
+	@srcdir@/../cf/mkinstalldirs $(LIBDIR) $(BLT_LIBRARY) $(DDPROTO_DIR)
+
+install-dragdrop: install-dirs
+	@set -x; for i in $(srcdir)/dd_protocols/*tcl* ; do \
+	    $(INSTALL_DATA) $$i $(BLT_LIBRARY)/dd_protocols ; \
+	done 
+
+install-files: install-dirs
+	@set -x; for i in $(FILES) ; do \
+	    $(INSTALL_DATA) $(srcdir)/$$i $(BLT_LIBRARY) ; \
+	done 
+
+install: install-dirs install-dragdrop install-files
+
+clean:
+	$(RM) *.bak *\~ "#"*
+

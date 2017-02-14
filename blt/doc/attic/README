@@ -1,0 +1,6 @@
+================
+doc/attic/README
+================
+
+This directory contains the manual pages of BLT commands which are now
+obsolete. Their code is still available in the directory "generic/attic".

@@ -39,7 +39,7 @@ char copyright[] =
  * From: @(#)main.c	5.4 (Berkeley) 3/22/91
  */
 char main_rcsid[] = 
-  "$Id: main.cpp,v 1.1.1.1 1997/08/13 05:39:36 chaffee Exp $";
+  "$Id: main.cpp,v 1.2 1998/04/25 06:10:06 chaffee Exp $";
 
 #ifdef __WIN32__
 #include <windows.h>
@@ -144,7 +144,7 @@ main(int argc, char *argv[])
 	rlogin = (strncmp(prompt, "rlog", 4) == 0) ? '~' : _POSIX_VDISABLE;
 	autologin = -1;
 
-	while ((ch = getopt(argc, argv, "8EKLS:X:ade:k:l:n:rt:x")) != EOF) {
+	while ((ch = getopt(argc, argv, "8C:EKLS:X:acde:k:l:n:rt:x")) != EOF) {
 		switch(ch) {
 		case '8':
 			eight = 3;	/* binary output and input */
@@ -232,6 +232,9 @@ main(int argc, char *argv[])
 			fprintf(stderr,
 				"%s: -x ignored, no encryption support.\n",
 				prompt);
+			break;
+		case 'C':
+			setrcname(optarg);
 			break;
 		case '?':
 		default:

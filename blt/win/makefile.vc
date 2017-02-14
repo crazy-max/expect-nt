@@ -1,0 +1,201 @@
+ROOT=..
+THIS=blt
+DLL_VER=80
+BLTWISH=$(THIS)wish$(DLL_VER).exe
+
+!include $(ROOT)\win\mkfiles\makefile.ini
+
+
+DLL_OBJS=	$(OBJDIR)\bltGraph.obj \
+		$(OBJDIR)\bltGrAxis.obj \
+		$(OBJDIR)\bltGrBar.obj \
+		$(OBJDIR)\bltGrElem.obj \
+		$(OBJDIR)\bltGrGrid.obj \
+		$(OBJDIR)\bltGrHairs.obj \
+		$(OBJDIR)\bltGrLegd.obj \
+		$(OBJDIR)\bltGrLine.obj \
+		$(OBJDIR)\bltGrMarker.obj \
+		$(OBJDIR)\bltGrMisc.obj \
+		$(OBJDIR)\bltGrPs.obj \
+        	$(OBJDIR)\bltWinBgexec.obj \
+		$(OBJDIR)\bltBitmap.obj \
+		$(OBJDIR)\bltBusy.obj \
+		$(OBJDIR)\bltDebug.obj \
+		$(OBJDIR)\bltDragDrop.obj \
+		$(OBJDIR)\bltHtext.obj \
+		$(OBJDIR)\bltSpline.obj \
+		$(OBJDIR)\bltTable.obj \
+		$(OBJDIR)\bltVector.obj \
+		$(OBJDIR)\bltWatch.obj \
+		$(OBJDIR)\bltWinOp.obj \
+        	$(OBJDIR)\bltInit.obj \
+		$(OBJDIR)\bltInput.obj \
+		$(OBJDIR)\bltList.obj \
+		$(OBJDIR)\bltText.obj \
+		$(OBJDIR)\bltUtil.obj \
+		$(OBJDIR)\bltTile.obj \
+		$(OBJDIR)\bltButton.obj \
+		$(OBJDIR)\bltWinButton.obj \
+		$(OBJDIR)\bltWinXDrawString.obj \
+		$(OBJDIR)\bltFrame.obj \
+		$(OBJDIR)\bltScrollbar.obj \
+		$(OBJDIR)\bltPie.obj
+
+WISH_OBJS=	$(OBJDIR)\bltWinMain.obj \
+		$(OBJDIR)\tkConsole.obj
+
+DLL_LIBS	= $(TKLIB) $(TCLLIB)
+INCLUDES	= $(TCL_INCLUDES) $(TK_INCLUDES)
+BLT_LIBRARY  	= /tcl/lib/blt/library
+DEFINES      	= $(TK_DEFINES) -DBLT_LIBRARY=\"$(BLT_LIBRARY)\" -DBLT_COMPATIBLE_LIBS $(BLT_WDEBUG)
+INCLUDES	= -I. -I$(SRCDIR) $(TCL_INCLUDES) $(TK_INCLUDES)
+
+!include $(ROOT)\win\mkfiles\makefile.mof
+!include $(ROOT)\win\mkfiles\makefile.mdl
+
+#dependancies
+$(OBJDIR)\bltGraph.obj:		$(SRCDIR)\bltGraph.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltGrAxis.obj:	$(SRCDIR)\bltGrAxis.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltGrBar.obj:		$(SRCDIR)\bltGrBar.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltGrElem.obj:	$(SRCDIR)\bltGrElem.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltGrGrid.obj:	$(SRCDIR)\bltGrGrid.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltGrHairs.obj:	$(SRCDIR)\bltGrHairs.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltGrLegd.obj:	$(SRCDIR)\bltGrLegd.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltGrLine.obj:	$(SRCDIR)\bltGrLine.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltGrMarker.obj:	$(SRCDIR)\bltGrMarker.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltGrMisc.obj:	$(SRCDIR)\bltGrMisc.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltGrPs.obj:		$(SRCDIR)\bltGrPs.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltBitmap.obj:	$(SRCDIR)\bltBitmap.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltBusy.obj:		$(SRCDIR)\bltBusy.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltDebug.obj:		$(SRCDIR)\bltDebug.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltDragDrop.obj:	$(SRCDIR)\bltDragDrop.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltHtext.obj:		$(SRCDIR)\bltHtext.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltSpline.obj:	$(SRCDIR)\bltSpline.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltTable.obj:		$(SRCDIR)\bltTable.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltVector.obj:	$(SRCDIR)\bltVector.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltWatch.obj:		$(SRCDIR)\bltWatch.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltWinOp.obj:		$(SRCDIR)\bltWinOp.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltInit.obj:		$(SRCDIR)\bltInit.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltInput.obj:		$(SRCDIR)\bltInput.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltList.obj:		$(SRCDIR)\bltList.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltText.obj:		$(SRCDIR)\bltText.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltUtil.obj:		$(SRCDIR)\bltUtil.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltTile.obj:		$(SRCDIR)\bltTile.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltButton.obj:	$(SRCDIR)\bltButton.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltFrame.obj:		$(SRCDIR)\bltFrame.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltScrollbar.obj:	$(SRCDIR)\bltScrollbar.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltPie.obj:		$(SRCDIR)\bltPie.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltWinBgexec.obj:	$(WINDIR)\bltWinBgexec.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltWinButton.obj:	$(WINDIR)\bltWinButton.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltWinXDrawString.obj:$(WINDIR)\bltWinXDrawString.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\bltWinMain.obj:	$(WINDIR)\bltWinMain.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+$(OBJDIR)\tkConsole.obj:	$(TKDIR)\generic\tkConsole.c
+	$(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) $(DEFINES) \
+	  -Fo$(OBJDIR)\ $?
+
+!include $(ROOT)\win\mkfiles\makefile.cln

@@ -1,0 +1,103 @@
+#!/bin/sh ./myblt
+
+source bltDemo.tcl
+
+bind . <Destroy> {exit}
+
+option add *graph.elemScaleSymbols true
+
+# test to show spline over-shooting
+
+set tcl_precision 15
+
+# Make and fill small vectors
+vector a(10) b(10)
+vector c d e
+# make plot
+graph .graph 
+
+proc	doit { ss ss1 ss2 } {
+	global	SS5 SS1 SS2 SS3
+	global	SS4 tcl_precision
+	set otp $tcl_precision
+	set SS1 [string trim [format "%8.3lf" $ss1]]
+	set SS2 [string trim [format "%8.3lf" $ss2]]
+	set SS4 [string trim [format "%8.3lf" [expr $ss2+(($ss*1000)%297)/102.3]]]
+	set SS3 [string trim [format "%8.3lf" [expr (($ss*1000)%317)/103.3]]]
+	set SS5 [string trim [format "%8.3lf" [expr (($ss*1000)%497)/99.7]]]
+uplevel	#0 {
+	for {set i 10} {$i > 0} {incr i -1} {
+    		set a($i-1) [expr $SS2+$i*($i+$SS5)]
+    		set b($i-1) [expr sin(($i+$SS4)*$SS1*$i*($i+$SS3))]
+		}
+	a sort b
+
+
+	# make and fill (x only) large vectors
+	a populate c 10
+
+	# natural spline interpolation
+	spline natural a b c d
+
+	# quadratic spline interpolation
+	spline quadratic a b c e -error 0.0
+	}
+	.graph xaxis configure -title "$SS2+x*(x+$SS5)" 
+	.graph yaxis configure -title "sin($SS1*x*(x+$SS4)*(x+$SS3))"
+	after 6500 "set SS \[clock seconds\];doit \[expr \$SS%(113+$ss/7)\] \[expr 1+(\$SS%(173+$ss/11))/17.2\] \[expr (\$SS%(131+$ss/5))/27.3\]"
+}
+
+doit 0 1 0
+
+
+.graph element create Original -x a -y b \
+    -color red4 \
+    -fill red \
+    -pixels 5 \
+    -symbol circle 
+
+.graph element create Natural -x c -y d \
+    -color green4 \
+    -fill green \
+    -pixels 3 \
+    -symbol triangle
+
+.graph element create Quadratic -x c -y e \
+    -color blue4 \
+    -fill blue \
+    -pixels 3 \
+    -symbol diamond 
+
+table . .graph -fill both
+
+Blt_ZoomStack .graph
+Blt_Crosshairs .graph
+Blt_ActiveLegend .graph
+Blt_ClosestPoint .graph
+Blt_PrintKey .graph
+
+
+proc re_bg { c } {
+	if { "$c" == "pink" } { set nc red } else { set nc pink }
+	after 2000 "re_bg $nc"
+	.graph config -bg $c
+	}
+proc re_fg { c } {
+	if { "$c" == "blue" } { set nc green } else { set nc blue }
+	after 2900 "re_fg $nc"
+	.graph config -fg $c
+	}
+proc re_xg { c } {
+	if { "$c" == "purple" } { set nc yellow } else { set nc purple }
+	after 3700 "re_xg $nc"
+	.graph xaxis config -color $c
+	}
+proc re_yg { c } {
+	if { "$c" == "orange" } { set nc brown } else { set nc orange }
+	after 3700 "re_yg $nc"
+	.graph yaxis config -color $c
+	}
+re_bg pink
+re_fg blue
+re_xg blue
+re_yg blue

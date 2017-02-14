@@ -6,16 +6,16 @@
 '\" of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 '\" 
 '\"
-'\" SCCS: @(#) frame.n 1.28 96/09/19 13:03:17
+'\" SCCS: @(#) frame.n 1.30 97/10/31 12:58:48
 '\" 
 .so man.macros
-.TH frame n 4.3 Tk "Tk Built-In Commands"
+.TH frame n 8.0 Tk "Tk Built-In Commands"
 .BS
 '\" Note:  do not modify the .SH NAME line immediately below!
 .SH NAME
 frame \- Create and manipulate frame widgets
 .SH SYNOPSIS
-\fBframe\fI \fIpathName ?\fIoptions\fR?
+\fBframe\fR \fIpathName\fR ?\fIoptions\fR?
 .SO
 \-borderwidth	\-highlightbackground	\-highlightthickness	\-takefocus
 \-cursor	\-highlightcolor	\-relief
@@ -45,7 +45,7 @@ If the \fBcolormap\fR option is not specified, the new window
 uses the same colormap as its parent.
 This option may not be changed with the \fBconfigure\fR
 widget command.
-.VS br
+.VS "" br
 .OP \-container container Container
 The value must be a boolean.  If true, it means that this window will
 be used as a container in which some other application will be embedded

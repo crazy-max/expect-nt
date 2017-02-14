@@ -1,0 +1,50 @@
+Subject:      ANNOUNCE: tkbusy
+From:         mike@hightec.saarlink.de (Michael Schumacher)
+Date:         1996/04/01
+Message-Id:   <4jonpr$q3@hades.rz.uni-sb.de>
+Newsgroups:   comp.lang.tcl
+
+[Before you start wondering -- this is *not* an April joke... ;^) ]
+
+
+Hello,
+
+every now and then people ask "how do I make my Tk app indicate that
+it's busy?". Vanilla Tk doesn't provide appropriate means, actually,
+and so I've always recommended to add BLT or Tix, which both offer
+"busy" commands. Unfortunately, these commands are based on InputOnly
+windows, which are not (yet) supported by Tk's Xlib emulation. This
+restricts their usage to Unix/X11 platforms.
+
+Because I have to port some of my Tk apps to Windows NT, I was looking
+for a portable solution to the "busy" problem. As you can imagine, it's
+not sufficient to just change the mouse cursor to a "watch," since
+bindings will continue to trigger no matter what cursor form is chosen.
+So I hacked the following Tcl proc, "tkbusy," which fits my current
+needs, but is by no means a full replacement for blt_busy:
+
+- it's too slow if an application consists of many widgets/text tags
+- it's not really safe; e.g. bindings of canvas items will still
+  trigger. This is because Tk doesn't offer an efficient way to find
+  out all tags currently defined in a canvas (there's no "tag names"
+  command or something similar, right?). I therefore leave them alone
+  in "tkbusy" for performance reasons. "tkbusy" will probably also
+  fail for (certain) MegaWidgets for similar reasons.
+
+IMHO, Tk badly misses a command like blt_busy. I often complained
+about this in the past, but it was not really a problem, because
+one could always add BLT. However, this ain't true anymore, now
+that Tcl/Tk has been ported to Windows and MacOS, for which most
+extensions are not yet available (and maybe never will be). If I
+missed something, and there already is a portable, safe and
+efficient way to solve the "busy" problem, please let me know.
+
+In the meanwhile, you might want to try out the following script.
+The "tkbusy" proc is optimized for speed, not for readability (I'm
+really looking forward for the promised byte-compiler... ;). Feel
+free to use it in your own apps, and let me know if you find bugs or
+have suggestions (especially concerning the canvas tags problem).
+
+
+"busy on",
+mike

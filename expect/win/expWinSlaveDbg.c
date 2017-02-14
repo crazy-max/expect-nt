@@ -11,6 +11,7 @@
  *	the master pipe.
  *
  * Copyright (c) 1997 by Mitel Corporation
+ * Copyright (c) 1997-1998 by Gordon Chaffee
  *
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -19,6 +20,24 @@
  *  * Maintain cursor information for each console screen buffer.
  *  * Intercept additional console input and output characters to better
  *    keep track of current console state.
+ *  * Keep all keyboard strokes within the slave until we see a call
+ *    made ReadConsoleInput, ReadConsole, or some call like that.
+ *    Maybe a better idea is to not echo characters until we see how
+ *    they are read.  So never write more than a line at a time to
+ *    the console input, but as soon as wee see a call to ReadConsole, we
+ *    echo characters (if necessary) on the way into the call.
+ *    If the call is made instead to ReadConsoleInput, then we remove
+ *    a character from our echo list (assuming of course the input
+ *    event was a key stroke).  This would give the most accurate
+ *    accounting of characters.
+ *  * I've been having trouble with cmd.exe.  If there is a file such asa
+ *    x.in that you try to run, and there is no application tied to .in,
+ *    a graphical message pops up telling you there is no program associated
+ *    with this file.  For some reason, if I run cmd.exe under apispy32
+ *    from Matt Pietrek, the graphical message doesn't pop up.  I tried
+ *    starting the program with the same sort of flags as he uses, but it
+ *    doesn't seem to work to make the messages go away.  I suspect that
+ *    the messages are coming from the shell somehow.
  */
 
 /*
@@ -27,6 +46,7 @@
  */
 
 #include <windows.h>
+#include <imagehlp.h>
 #include <stddef.h>
 #include "tclInt.h"
 #include "tclPort.h"
@@ -34,7 +54,13 @@
 #include "expWinSlave.h"
 #include <assert.h>
 
-#define SUBPROCESS_BUFFER_LEN 1024
+#if 0
+#  define LOG_ENTRY(function) ExpSyslog("Expect SlaveDriver: " function)
+#  define LOG_EXIT(function) ExpSyslog("Expect SlaveDriver: " function " exited")
+#else
+#  define LOG_ENTRY(function)
+#  define LOG_EXIT(function)
+#endif
 
 #define SINGLE_STEP_BIT 0x100;	/* This only works on the x86 processor */
 
@@ -97,7 +123,7 @@ typedef struct _ExpThreadInfo {
 } ExpThreadInfo;
 
 typedef void (ExpBreakProc) (ExpProcess *, ExpThreadInfo *,
-    ExpBreakpoint *, DWORD ret, DWORD direction);
+    ExpBreakpoint *, PDWORD returnValue, DWORD direction);
 
 typedef struct _ExpBreakInfo {
     PUCHAR funcName;		/* Name of function to intercept */
@@ -107,6 +133,11 @@ typedef struct _ExpBreakInfo {
 #define EXP_BREAK_OUT	2	/* Call handler on the way out */
     DWORD dwFlags;		/* Bits for direction to call handler in */
 } ExpBreakInfo;
+
+typedef struct _ExpDllBreakpoints {
+    PUCHAR dllName;
+    ExpBreakInfo *breakInfo;
+} ExpDllBreakpoints;
 
 struct _ExpBreakpoint {
     BOOL returning;		/* Is this a returning breakpoint? */
@@ -120,7 +151,14 @@ struct _ExpBreakpoint {
     struct _ExpBreakpoint *nextPtr;
 };
 
-#define EXP_CREATEPROCESS_MEM_OFFSET 4096
+typedef struct {
+    BOOL loaded;
+    HANDLE hFile;
+    LPVOID baseAddr;
+    PCHAR  modName;
+    PIMAGE_DEBUG_INFORMATION dbgInfo;
+} ExpModule;
+
 #define PAGESIZE 0x1000
 #define PAGEMASK (PAGESIZE-1)
 
@@ -136,6 +174,8 @@ struct _ExpProcess {
     DWORD nBreakCount;		/* Number of breakpoints hit */
     DWORD consoleHandles[100];	/* A list of input console handles */
     DWORD consoleHandlesMax;
+    BOOL  isConsoleApp;		/* Is this a console app? */
+    BOOL  isShell;		/* Is this some sort of console shell? */
     HANDLE hProcess;		/* handle to subprocess */
     DWORD hPid;			/* Global process id */
     DWORD threadCount;		/* Number of threads in process */
@@ -145,6 +185,8 @@ struct _ExpProcess {
     BYTE  pMemoryCache[PAGESIZE]; /* Subprocess memory cache */
     OVERLAPPED overlapped;	/* Overlapped structure for writing to master */
     Tcl_HashTable *funcTable;	/* Function table name to address mapping */
+    Tcl_HashTable *moduleTable;	/* Win32 modules that have been loaded */
+    ExpModule *exeModule;	/* Executable module info */
     struct _ExpProcess *nextPtr;
 };
 
@@ -152,9 +194,14 @@ struct _ExpProcess {
  * List of processes that are being debugged
  */
 static ExpProcess *ProcessList = NULL;
+static HANDLE HConsole;		/* Shared console */
 static HANDLE HMaster;		/* Handle to master output pipe */
+static int UseSocket;
 static COORD CursorPosition;
-static BOOL CursorKnown = FALSE;
+static BOOL CursorKnown = FALSE; /* Do we know where the remote cursor is? */
+static COORD ConsoleSize = {80, 25};
+
+static char *SymbolPath;
 
 /*
  * Static functions in this file:
@@ -177,40 +224,55 @@ extern ExpBreakpoint *	SetBreakpointAtAddr(ExpProcess *, ExpBreakInfo *,
 			    PVOID funcPtr);
 static void		StartSubprocessA(ExpProcess *, ExpThreadInfo *);
 static void		StartSubprocessW(ExpProcess *, ExpThreadInfo *);
+static void		RefreshScreen(LPOVERLAPPED over);
 
-extern void		OnGetStdHandle(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnOpenConsoleW(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnSetConsoleMode(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnSetConsoleCursorPosition(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnWriteConsoleA(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnWriteConsoleW(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnWriteConsoleOutputA(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnWriteConsoleOutputW(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnWriteConsoleOutputCharacterA(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnWriteConsoleOutputCharacterW(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
+static void		OnBeep(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnFillConsoleOutputCharacter(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnGetStdHandle(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnIsWindowVisible(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnOpenConsoleW(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnReadConsoleInput(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnSetConsoleActiveScreenBuffer(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnSetConsoleCursorPosition(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnSetConsoleMode(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnSetConsoleWindowInfo(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnScrollConsoleScreenBuffer(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnWriteConsoleA(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnWriteConsoleW(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnWriteConsoleOutputA(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+extern void		OnWriteConsoleOutputW(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnWriteConsoleOutputCharacterA(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
+static void		OnWriteConsoleOutputCharacterW(ExpProcess *,
+			    ExpThreadInfo *, ExpBreakpoint *, PDWORD, DWORD);
 #if 1 /* XXX: Testing purposes only */
-extern void		OnExpGetExecutablePathA(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnExpGetExecutablePathW(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnSearchPathW(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnlstrcpynW(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnlstrrchrW(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
-extern void		OnGetFileAttributesW(ExpProcess *, ExpThreadInfo *,
-			    ExpBreakpoint *, DWORD, DWORD);
+static void		OnExpGetExecutablePathA(ExpProcess *, ExpThreadInfo *,
+			    ExpBreakpoint *, PDWORD, DWORD);
+static void		OnExpGetExecutablePathW(ExpProcess *, ExpThreadInfo *,
+			    ExpBreakpoint *, PDWORD, DWORD);
+static void		OnSearchPathW(ExpProcess *, ExpThreadInfo *,
+			    ExpBreakpoint *, PDWORD, DWORD);
+static void		OnlstrcpynW(ExpProcess *, ExpThreadInfo *,
+			    ExpBreakpoint *, PDWORD, DWORD);
+static void		OnlstrrchrW(ExpProcess *, ExpThreadInfo *,
+			    ExpBreakpoint *, PDWORD, DWORD);
+static void		OnGetFileAttributesW(ExpProcess *, ExpThreadInfo *,
+			    ExpBreakpoint *, PDWORD, DWORD);
 #endif
 
 static void		OnXBreakpoint(ExpProcess *, LPDEBUG_EVENT);
@@ -218,8 +280,10 @@ static void		OnXCreateProcess(ExpProcess *, LPDEBUG_EVENT);
 static void		OnXCreateThread(ExpProcess *, LPDEBUG_EVENT);
 static void		OnXDeleteThread(ExpProcess *, LPDEBUG_EVENT);
 static void		OnXFirstBreakpoint(ExpProcess *, LPDEBUG_EVENT);
-static void		OnXSecondBreakpoint(ExpProcess *, LPDEBUG_EVENT);
 static void		OnXLoadDll(ExpProcess *, LPDEBUG_EVENT);
+static void		OnXUnloadDll(ExpProcess *, LPDEBUG_EVENT);
+static void		OnXSecondBreakpoint(ExpProcess *, LPDEBUG_EVENT);
+static void		OnXSecondChanceException(ExpProcess *,LPDEBUG_EVENT);
 static void		OnXSingleStep(ExpProcess *, LPDEBUG_EVENT);
 
 #ifndef UNICODE
@@ -229,18 +293,42 @@ static void		OnXSingleStep(ExpProcess *, LPDEBUG_EVENT);
  */
 
 ExpBreakInfo BreakArrayKernel32[] = {
+    {"FillConsoleOutputCharacterA", 5, OnFillConsoleOutputCharacter, EXP_BREAK_OUT},
+    {"FillConsoleOutputCharacterW", 5, OnFillConsoleOutputCharacter, EXP_BREAK_OUT},
     {"GetStdHandle", 1, OnGetStdHandle, EXP_BREAK_OUT},
     {"OpenConsoleW", 4, OnOpenConsoleW, EXP_BREAK_OUT},
+    {"ReadConsoleInputA", 4, OnReadConsoleInput, EXP_BREAK_OUT},
+    {"ReadConsoleInputW", 4, OnReadConsoleInput, EXP_BREAK_OUT},
     {"SetConsoleMode", 2, OnSetConsoleMode, EXP_BREAK_OUT},
+    {"SetConsoleActiveScreenBuffer", 1, OnSetConsoleActiveScreenBuffer, EXP_BREAK_OUT},
     {"SetConsoleCursorPosition", 2, OnSetConsoleCursorPosition, EXP_BREAK_OUT},
+    {"SetConsoleWindowInfo", 2, OnSetConsoleWindowInfo, EXP_BREAK_OUT},
+    {"ScrollConsoleScreenBufferA", 5, OnScrollConsoleScreenBuffer, EXP_BREAK_OUT},
+    {"ScrollConsoleScreenBufferW", 5, OnScrollConsoleScreenBuffer, EXP_BREAK_OUT},
     {"WriteConsoleA", 5, OnWriteConsoleA, EXP_BREAK_OUT},
     {"WriteConsoleW", 5, OnWriteConsoleW, EXP_BREAK_OUT},
     {"WriteConsoleOutputA", 5, OnWriteConsoleOutputA, EXP_BREAK_OUT},
     {"WriteConsoleOutputW", 5, OnWriteConsoleOutputW, EXP_BREAK_OUT},
     {"WriteConsoleOutputCharacterA", 5, OnWriteConsoleOutputCharacterA, EXP_BREAK_OUT},
-    {"WriteConsoleOutputCharacterW", 5, OnWriteConsoleOutputCharacterW, EXP_BREAK_OUT},
+    {"WriteConsoleOutputCharacterW", 5, OnWriteConsoleOutputCharacterW, EXP_BREAK_OUT|EXP_BREAK_IN},
+    {"Beep", 2, OnBeep, EXP_BREAK_OUT|EXP_BREAK_IN},
     {NULL, 0, NULL}
 };
+
+ExpBreakInfo BreakArrayUser32[] = {
+    {"IsWindowVisible", 1, OnIsWindowVisible, EXP_BREAK_OUT},
+    {NULL, 0, NULL}
+};
+
+/*
+ * Structure with all the breakpoints we want to set
+ */
+ExpDllBreakpoints BreakPoints[] = {
+    {"kernel32.dll", BreakArrayKernel32},
+    {"user32.dll", BreakArrayUser32},
+    {NULL, NULL}
+};
+
 #endif /* !UNICODE */
 
 #ifndef UNICODE
@@ -259,10 +347,6 @@ ExpBreakInfo BreakArrayKernel32[] = {
  * Side Effects:
  *	Memory is allocated, an event is created.
  *
- * Notes:
- *	XXX: This structure is currently never freed, but it should be
- *	whenever a process exits.
- *
  *----------------------------------------------------------------------
  */
 
@@ -278,6 +362,8 @@ ExpProcessNew(void)
     proc->offset = 0;
     proc->nBreakCount = 0;
     proc->consoleHandlesMax = 0;
+    proc->isConsoleApp = FALSE;
+    proc->isShell = FALSE;
     proc->hProcess = NULL;
     proc->pSubprocessMemory = 0;
     proc->pSubprocessBuffer = 0;
@@ -285,6 +371,9 @@ ExpProcessNew(void)
     ZeroMemory(&proc->overlapped, sizeof(OVERLAPPED));
     proc->funcTable = malloc(sizeof(Tcl_HashTable));
     Tcl_InitHashTable(proc->funcTable, TCL_STRING_KEYS);
+    proc->moduleTable = malloc(sizeof(Tcl_HashTable));
+    Tcl_InitHashTable(proc->moduleTable, TCL_ONE_WORD_KEYS);
+    proc->exeModule = NULL;
     proc->nextPtr = ProcessList;
     ProcessList = proc;
     return proc;
@@ -323,6 +412,8 @@ ExpProcessFree(ExpProcess *proc)
     }
     Tcl_DeleteHashTable(proc->funcTable);
     free(proc->funcTable);
+    Tcl_DeleteHashTable(proc->moduleTable);
+    free(proc->moduleTable);
 
     for (pprev = NULL, pcurr = ProcessList; pcurr != NULL;
 	 pcurr = pcurr->nextPtr)
@@ -338,6 +429,30 @@ ExpProcessFree(ExpProcess *proc)
     }
 
     free(proc);
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * ExpProcessFreeByHandle --
+ *
+ *	Fine a process structure by its handle and free it.
+ *
+ * Results:
+ *	None
+ *
+ *----------------------------------------------------------------------
+ */
+void
+ExpProcessFreeByHandle(HANDLE hProcess)
+{
+    ExpProcess *proc;
+    for (proc = ProcessList; proc != NULL; proc = proc->nextPtr) {
+	if (proc->hProcess == hProcess) {
+	    ExpProcessFree(proc);
+	    return;
+	}
+    }
 }
 
 /*
@@ -364,8 +479,10 @@ ExpKillProcessList()
 
     for (proc = ProcessList; proc != NULL; proc = proc->nextPtr) {
 	Exp_KillProcess((Tcl_Pid) proc->hProcess);
-	if (WaitForSingleObject(proc->hProcess, 10000) == WAIT_TIMEOUT) {
-	    Exp_KillProcess((Tcl_Pid) proc->hProcess);
+	if (proc->hProcess != NULL) {
+	    if (WaitForSingleObject(proc->hProcess, 10000) == WAIT_TIMEOUT) {
+		Exp_KillProcess((Tcl_Pid) proc->hProcess);
+	    }
 	}
     }
 }
@@ -390,8 +507,11 @@ DWORD WINAPI
 ExpSlaveDebugThread(LPVOID *lparg)
 {
     ExpSlaveDebugArg *arg = (ExpSlaveDebugArg *) lparg;
+    ExpProcess *proc;
 
-    HMaster = arg->out;		/* Set the master program */
+    HConsole = arg->hConsole;
+    HMaster = arg->hMaster;		/* Set the master program */
+    UseSocket = arg->useSocket;
 
     /* Make sure the child does not ignore Ctrl-C */
     SetConsoleCtrlHandler(NULL, FALSE);
@@ -414,31 +534,29 @@ ExpSlaveDebugThread(LPVOID *lparg)
 	ExitThread(0);
     }
 
+    proc = ExpProcessNew();
+    proc->hPid = arg->globalPid;
     if (! arg->passThrough) {
-	ExpProcess *proc;
 
-        ExpAddToWaitQueue(arg->process);
-
-	proc = ExpProcessNew();
+	CloseHandle(arg->process);
 	proc->hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, arg->globalPid);
-	proc->hPid = arg->globalPid;
-
+	arg->process = proc->hProcess;
 	if (proc->hProcess == NULL) {
-	  arg->lastError = GetLastError();
-	  ExitThread(0);
+	    arg->lastError = GetLastError();
+	    ExitThread(0);
 	}
+	ExpAddToWaitQueue(proc->hProcess);
 
 	proc->overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 
 	ExpCommonDebugger();
     } else {
 	ExpProcess *proc;
-	ExpAddToWaitQueue(arg->process);
 
 	proc = ExpProcessNew();
 	proc->overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 	proc->hProcess = arg->process;
-	proc->hPid = arg->globalPid;
+	ExpAddToWaitQueue(proc->hProcess);
     }
 
     return 0;			/* Never executes */
@@ -467,6 +585,22 @@ ExpCommonDebugger()
     DWORD dwContinueStatus;	/* exception continuation */
     DWORD err;
     ExpProcess *proc;
+    DWORD n, i;
+
+    n = GetEnvironmentVariable("Path", NULL, 0);
+    n += GetEnvironmentVariable("_NT_SYMBOL_PATH", NULL, 0) + 1;
+    n += GetEnvironmentVariable("_NT_ALT_SYMBOL_PATH", NULL, 0) + 1;
+    n += GetEnvironmentVariable("SystemRoot", NULL, 0) + 1;
+
+    SymbolPath = malloc(n);
+
+    i = GetEnvironmentVariable("Path", SymbolPath, n);
+    SymbolPath[i++] = ';';
+    i += GetEnvironmentVariable("_NT_SYMBOL_PATH", &SymbolPath[i], n-i);
+    SymbolPath[i++] = ';';
+    i += GetEnvironmentVariable("_NT_ALT_SYMBOL_PATH", &SymbolPath[i], n-i);
+    SymbolPath[i++] = ';';
+    i += GetEnvironmentVariable("SystemRoot", &SymbolPath[i], n-i);
 
     for(;;) {
 	dwContinueStatus = DBG_CONTINUE;
@@ -497,7 +631,12 @@ ExpCommonDebugger()
 		    debEvent.dwProcessId, debEvent.dwThreadId,
 		    debEvent.dwDebugEventCode);
 	    EXP_LOG("Unexpected debug event for %s", buf);
-	    continue;
+	    if (debEvent.dwDebugEventCode == EXCEPTION_DEBUG_EVENT) {
+		EXP_LOG("ExceptionCode: 0x%08x",
+			debEvent.u.Exception.ExceptionRecord.ExceptionCode);
+		dwContinueStatus = DBG_EXCEPTION_NOT_HANDLED;
+	    }
+	    goto skip;
 	}
 
 	/* Process the debugging event code. */
@@ -544,8 +683,14 @@ ExpCommonDebugger()
 	    case EXCEPTION_DATATYPE_MISALIGNMENT:
 	    case EXCEPTION_ACCESS_VIOLATION:
 	    default:
+		/*
+		 * An exception was hit and it was not handled by the program.
+		 * Now it is time to get a backtrace.
+		 */
+		if (! debEvent.u.Exception.dwFirstChance) {
+		    OnXSecondChanceException(proc, &debEvent);
+		}
 		dwContinueStatus = DBG_EXCEPTION_NOT_HANDLED;
-
 	    }
 	    break;
 
@@ -573,8 +718,16 @@ ExpCommonDebugger()
 	    break;
 
 	case EXIT_PROCESS_DEBUG_EVENT:
+	    /*
+	     * XXX: This is really screwed up, but we get breakpoints
+	     * for processes that are already dead.  So we cannot remove
+	     * and cleanup a process until some later (How much later?)
+	     * point.  This really, really sucks....
+	     */
 	    CloseHandle(proc->overlapped.hEvent);
+#if 0 /* This gets closed in WaitQueueThread */
 	    CloseHandle(proc->hProcess);
+#endif
 	    err = debEvent.u.ExitProcess.dwExitCode;
 	    ExpProcessFree(proc);
 	    /*
@@ -590,13 +743,7 @@ ExpCommonDebugger()
 	    break;
 
 	case UNLOAD_DLL_DEBUG_EVENT:
-#if 0
-	    fprintf(stderr, "0x%08x: Unloading\n", debEvent.u.UnloadDll.lpBaseOfDll);
-#endif
-	    /*
-	     * Display a message that the DLL has
-	     * been unloaded.
-	     */
+	    OnXUnloadDll(proc, &debEvent);
 	    break;
 
 	case OUTPUT_DEBUG_STRING_EVENT:
@@ -604,11 +751,93 @@ ExpCommonDebugger()
 	    break;
 	}
 
+    skip:
 	/* Resume executing the thread that reported the debugging event. */
 	ContinueDebugEvent(debEvent.dwProcessId,
 			   debEvent.dwThreadId, dwContinueStatus);
     }
 }
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * LoadedModule --
+ *
+ *	A module with the specifed name was loaded.  Add it to our
+ *	list of loaded modules and print any debugging information
+ *	if debugging is enabled.
+ *
+ * Results:
+ *	If the module is known, return TRUE.  Otherwise, return FALSE
+ *
+ *----------------------------------------------------------------------
+ */
+
+static int
+LoadedModule(ExpProcess *proc, HANDLE hFile, LPVOID modname, int isUnicode,
+    LPVOID baseAddr, DWORD debugOffset)
+{
+#undef PRINTF
+#if 0
+#define PRINTF(x) printf x
+#else
+#define PRINTF(x)
+#endif
+    int known = 1;
+    PVOID ptr;
+    Tcl_HashEntry *tclEntry;
+    int isNew;
+    char mbstr[512];
+    char *s = NULL;
+    ExpModule *modPtr;
+
+    if (modname) {
+
+	/*
+	 * This modname is a pointer to the name of the
+	 * DLL in the process space of the subprocess
+	 */
+	if (ReadSubprocessMemory(proc, modname, &ptr, sizeof(PVOID)) && ptr) {
+	    if (isUnicode) {
+		WCHAR name[512];
+		ReadSubprocessStringW(proc, ptr, name, 512);
+		PRINTF(("0x%08x: Loaded %S\n", baseAddr, name));
+		wcstombs(mbstr, name, sizeof(mbstr));
+	    } else {
+		ReadSubprocessStringA(proc, ptr, mbstr, sizeof(mbstr));
+		PRINTF(("0x%08x: Loaded %s\n", baseAddr, mbstr));
+	    }
+	    s = strdup(mbstr);
+
+	} else {
+	    PRINTF(("0x%08x: Loaded module, but couldn't read subprocess' memory, error=0x%08x\n", baseAddr, GetLastError()));
+	    known = 0;
+	}
+	if (debugOffset) {
+	    PRINTF((" with debugging info at offset 0x%08x\n",
+		   debugOffset));
+	}
+    } else {
+	PRINTF(("0x%08x: Loaded module with no known name\n", baseAddr));
+    }
+    tclEntry = Tcl_CreateHashEntry(proc->moduleTable, baseAddr, &isNew);
+
+    modPtr = (ExpModule *) malloc(sizeof(ExpModule));
+    modPtr->loaded = FALSE;
+    modPtr->hFile = hFile;
+    modPtr->baseAddr = baseAddr;
+    modPtr->modName = s;
+    modPtr->dbgInfo = NULL;
+    if (proc->exeModule == NULL) {
+	proc->exeModule = modPtr;
+    }
+
+    Tcl_SetHashValue(tclEntry, modPtr);
+
+    return known;
+#undef PRINTF
+}
+
 
 /*
  *----------------------------------------------------------------------
@@ -628,20 +857,28 @@ static void
 OnXCreateProcess(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
 {
     ExpThreadInfo *threadInfo;
+    CREATE_PROCESS_DEBUG_INFO *info = &pDebEvent->u.CreateProcessInfo;
+    int known;
 
     if (proc == NULL) {
 	proc = ExpProcessNew();
 	proc->overlapped.hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 	
-	DuplicateHandle(GetCurrentProcess(),
-			pDebEvent->u.CreateProcessInfo.hProcess,
-			GetCurrentProcess(),
-			&proc->hProcess, SYNCHRONIZE|PROCESS_ALL_ACCESS,
-			FALSE, 0);
+	if (!DuplicateHandle(GetCurrentProcess(),
+			     info->hProcess,
+			     GetCurrentProcess(),
+			     &proc->hProcess, PROCESS_ALL_ACCESS,
+			     FALSE, 0)) {
+	    fprintf(stderr, "Unable to duplicate handle\n");
+	}
 	proc->hPid = pDebEvent->dwProcessId;
 
 	ExpAddToWaitQueue(proc->hProcess);
     }
+
+    known = LoadedModule(proc, info->hFile, info->lpImageName,
+		info->fUnicode, info->lpBaseOfImage,
+		info->dwDebugInfoFileOffset);
 
     /*
      * As needed, examine or change the registers of the
@@ -655,18 +892,10 @@ OnXCreateProcess(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
 
     threadInfo = (ExpThreadInfo *) malloc(sizeof(ExpThreadInfo));
     threadInfo->dwThreadId = pDebEvent->dwThreadId;
-    threadInfo->hThread = pDebEvent->u.CreateProcessInfo.hThread;
+    threadInfo->hThread = info->hThread;
     threadInfo->nextPtr = proc->threadList;
     proc->threadCount++;
     proc->threadList = threadInfo;
-    
-    /*
-     * We don't use the file handle, so close it.
-     */
-    if (pDebEvent->u.CreateProcessInfo.hFile != NULL) {
-	CloseHandle(pDebEvent->u.CreateProcessInfo.hFile);
-    }
-    CloseHandle(pDebEvent->u.CreateProcessInfo.hProcess);
 }
 
 /*
@@ -867,6 +1096,7 @@ OnXSecondBreakpoint(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
     DWORD base;
     LPEXCEPTION_DEBUG_INFO exceptInfo;
     ExpBreakInfo *info;
+    int i;
 
     exceptInfo = &pDebEvent->u.Exception;
 
@@ -885,10 +1115,12 @@ OnXSecondBreakpoint(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
     SetThreadContext(FirstThread, &FirstContext);
 
     /*
-     * Set breakpoints in kernel32.dll
+     * Set all breakpoints
      */
-    for (info = BreakArrayKernel32; info->funcName; info++) {
-	SetBreakpoint(proc, info);
+    for (i = 0; BreakPoints[i].dllName; i++) {
+	for (info = BreakPoints[i].breakInfo; info->funcName; info++) {
+	    SetBreakpoint(proc, info);
+	}
     }
 }
 
@@ -928,6 +1160,7 @@ OnXBreakpoint(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
 #if 0
     fprintf(stderr, "OnXBreakpoint: proc=0x%x, count=%d, addr=0x%08x\n", proc, proc->nBreakCount, exceptInfo->ExceptionRecord.ExceptionAddress);
 #endif
+
     pbrkpt = NULL;
     for (brkpt = proc->brkptList; brkpt != NULL;
 	 pbrkpt = brkpt, brkpt = brkpt->nextPtr) {
@@ -949,6 +1182,7 @@ OnXBreakpoint(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
 
     context.ContextFlags = CONTEXT_FULL;
     GetThreadContext(tinfo->hThread, &context);
+
     if (! brkpt->returning) {
 	ExpBreakpoint *bpt;
 	/*
@@ -963,7 +1197,7 @@ OnXBreakpoint(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
 	tinfo->context = &context;
 
 	if (brkpt->breakInfo->dwFlags & EXP_BREAK_IN) {
-	    brkpt->breakInfo->breakProc(proc, tinfo, brkpt, context.Eax, EXP_BREAK_IN);
+	    brkpt->breakInfo->breakProc(proc, tinfo, brkpt, &context.Eax, EXP_BREAK_IN);
 	}
 
 	/*
@@ -1004,7 +1238,7 @@ OnXBreakpoint(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
 	 * Make the callback with the params and the return value
 	 */
 	if (brkpt->breakInfo->dwFlags & EXP_BREAK_OUT) {
-	    brkpt->breakInfo->breakProc(proc, tinfo, brkpt, context.Eax, EXP_BREAK_OUT);
+	    brkpt->breakInfo->breakProc(proc, tinfo, brkpt, &context.Eax, EXP_BREAK_OUT);
 	}
 	context.Eip = brkpt->origRetAddr;
 
@@ -1016,6 +1250,168 @@ OnXBreakpoint(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
 	free(brkpt);
     }
     SetThreadContext(tinfo->hThread, &context);
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * OnXSecondChanceException --
+ *
+ *	Handle a second chance exception
+ *
+ *----------------------------------------------------------------------
+ */
+
+static void
+OnXSecondChanceException(ExpProcess *proc,  LPDEBUG_EVENT pDebEvent)
+{
+    BOOL b;
+    STACKFRAME frame;
+    CONTEXT context;
+    ExpThreadInfo *tinfo;
+    Tcl_HashEntry *tclEntry;
+    Tcl_HashSearch tclSearch;
+    ExpModule *modPtr;
+    DWORD displacement;
+    BYTE symbolBuffer[sizeof(IMAGEHLP_SYMBOL) + 512];
+    PIMAGEHLP_SYMBOL pSymbol = (PIMAGEHLP_SYMBOL)symbolBuffer;
+    char *s;
+
+    if (!ExpDebug) {
+	return;
+    }
+
+    for (tinfo = proc->threadList; tinfo != NULL; tinfo = tinfo->nextPtr) {
+	if (pDebEvent->dwThreadId == tinfo->dwThreadId) {
+	    break;
+	}
+    }
+    assert(tinfo != NULL);
+
+    context.ContextFlags = CONTEXT_FULL;
+    GetThreadContext(tinfo->hThread, &context);
+
+    /*
+     * XXX: From what I can tell, SymInitialize is broken on Windows NT 4.0
+     * if you try to have it iterate the modules in a process.  It always
+     * returns an object mismatch error.  Instead, initialize without iterating
+     * the modules.  Contrary to what MSDN documentation says,
+     * Microsoft debuggers do not exclusively use the imagehlp API.  In
+     * fact, the only thing VC 5.0 uses is the StackWalk function.
+     * Windbg uses a few more functions, but it doesn't use SymInitialize.
+     * We will then do the hard work of finding all the
+     * modules and doing the right thing.
+     */
+
+    if (! SymInitialize(proc->hProcess, SymbolPath, FALSE)){
+	fprintf(stderr, "Unable to get backtrace (Debug 1): 0x%08x\n",
+	    GetLastError());
+	goto error;
+    }
+
+#ifdef _X86_
+    memset(&frame, 0, sizeof(frame));
+    frame.AddrPC.Mode = AddrModeFlat;
+    frame.AddrPC.Segment = 0;
+    frame.AddrPC.Offset = context.Eip;
+
+    frame.AddrReturn.Mode = AddrModeFlat;
+    frame.AddrReturn.Segment = 0;
+    frame.AddrReturn.Offset = context.Ebp; /* I think this is correct */
+
+    frame.AddrFrame.Mode = AddrModeFlat;
+    frame.AddrFrame.Segment = 0;
+    frame.AddrFrame.Offset = context.Ebp;
+
+    frame.AddrStack.Mode = AddrModeFlat;
+    frame.AddrStack.Segment = 0;
+    frame.AddrStack.Offset = context.Esp;
+
+    frame.FuncTableEntry = NULL;
+    frame.Params[0] = context.Eax;
+    frame.Params[1] = context.Ecx;
+    frame.Params[2] = context.Edx;
+    frame.Params[3] = context.Ebx;
+    frame.Far = FALSE;
+    frame.Virtual = FALSE;
+    frame.Reserved[0] = 0;
+    frame.Reserved[1] = 0;
+    frame.Reserved[2] = 0;
+    /* frame.KdHelp.* is not set */
+
+    /*
+     * Iterate through the loaded modules and load symbols for each one.
+     */
+    tclEntry = Tcl_FirstHashEntry(proc->moduleTable, &tclSearch);
+    while (tclEntry) {
+	modPtr = (ExpModule *) Tcl_GetHashValue(tclEntry);
+	if (! modPtr->loaded) {
+	    modPtr->dbgInfo = MapDebugInformation(modPtr->hFile, NULL,
+		SymbolPath, (DWORD)modPtr->baseAddr);
+
+	    SymLoadModule(proc->hProcess, modPtr->hFile,
+		NULL, NULL, (DWORD) modPtr->baseAddr, 0);
+	    modPtr->loaded = TRUE;
+	}
+
+	tclEntry = Tcl_NextHashEntry(&tclSearch);
+    }
+
+
+    if (proc->exeModule && proc->exeModule->dbgInfo && 
+	proc->exeModule->dbgInfo->ImageFileName) {
+	s = proc->exeModule->dbgInfo->ImageFileName;
+    } else {
+	s = "";
+    }
+    fprintf(stderr, "Backtrace for %s\n", s);
+    fprintf(stderr, "-------------------------------------\n");
+    EXP_LOG("Backtrace for %s", s);
+    while (1) {
+        pSymbol->SizeOfStruct = sizeof(symbolBuffer);
+        pSymbol->MaxNameLength = 512;
+
+	b = StackWalk(IMAGE_FILE_MACHINE_I386, proc->hProcess,
+	    tinfo->hThread, &frame, &context, NULL,
+	    SymFunctionTableAccess, SymGetModuleBase,
+	    NULL);
+
+	if (b == FALSE || frame.AddrPC.Offset == 0) {
+	    break;
+	}
+	    
+        if (SymGetSymFromAddr(proc->hProcess, frame.AddrPC.Offset,
+	    &displacement, pSymbol) )
+        {
+	    DWORD base;
+	    char buf[1024];
+
+	    base = SymGetModuleBase(proc->hProcess, frame.AddrPC.Offset);
+	    tclEntry = Tcl_FindHashEntry(proc->moduleTable, (void *) base);
+	    modPtr = (ExpModule *) Tcl_GetHashValue(tclEntry);
+	    if (modPtr->dbgInfo && modPtr->dbgInfo->ImageFileName) {
+		s = modPtr->dbgInfo->ImageFileName;
+	    } else {
+		s = "";
+	    }
+            fprintf(stderr, "%.20s %08x\t%s+%X\n", s, frame.AddrPC.Offset,
+		pSymbol->Name, displacement);
+	    sprintf(buf, "%.20s %08x\t%s+%X", s, frame.AddrPC.Offset,
+		pSymbol->Name, displacement);
+	    EXP_LOG("%s", buf);
+	} else {
+	    fprintf(stderr, "%08x\n", frame.AddrPC.Offset);
+	    EXP_LOG("%08x\t", frame.AddrPC.Offset);
+	}
+    }
+
+error:
+    if (ExpDebug) {
+	Sleep(10000);
+    }
+#else
+#  error "Unsupported architecture"	    
+#endif
 }
 
 /*
@@ -1059,7 +1455,7 @@ OnXSingleStep(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
  *----------------------------------------------------------------------
  */
 
-void
+static void
 OnXLoadDll(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
 {
     WORD w;
@@ -1080,40 +1476,11 @@ OnXLoadDll(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
     LPLOAD_DLL_DEBUG_INFO info = &pDebEvent->u.LoadDll;
     Tcl_HashEntry *tclEntry;
     int isNew;
+    BOOL bFound;
 
-#if 0 /* Debugging purposes */
-    int unknown = 0;
-
-    if (info->lpImageName) {
-
-	/*
-	 * This info->lpImageName is a pointer to the name of the
-	 * DLL in the process space of the subprocess
-	 */
-	if (ReadSubprocessMemory(proc, info->lpImageName, &ptr, sizeof(PVOID)) &&
-	    ptr)
-	{
-	    if (info->fUnicode) {
-		WCHAR name[256];
-		ReadSubprocessStringW(proc, ptr, name, 256);
-		printf("0x%08x: Loaded %S\n", info->lpBaseOfDll, name);
-	    } else {
-		CHAR name[256];
-		ReadSubprocessStringA(proc, ptr, name, 256);
-		printf("0x%08x: Loaded %S\n", info->lpBaseOfDll, name);
-	    }
-	} else {
-	    printf("0x%08x: Loaded DLL, but couldn't read subprocess' memory\n", info->lpBaseOfDll);
-	    unknown = 1;
-	}
-	if (info->dwDebugInfoFileOffset) {
-	    printf(" with debugging info at offset 0x%08x\n",
-		   info->dwDebugInfoFileOffset);
-	}
-    } else {
-	printf("0x%08x: Loaded DLL with no known name\n", info->lpBaseOfDll);
-    }
-#endif
+    int unknown = !LoadedModule(proc, info->hFile,
+	info->lpImageName, info->fUnicode,
+	info->lpBaseOfDll, info->dwDebugInfoFileOffset);
 
     base = (DWORD) info->lpBaseOfDll;
 
@@ -1189,8 +1556,15 @@ OnXLoadDll(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
     }
 #endif
 
-    if (stricmp(dllname, "kernel32.dll") != 0) {
-	CloseHandle(info->hFile);
+
+    bFound = FALSE;
+    for (n = 0; BreakPoints[n].dllName; n++) {
+	if (stricmp(dllname, BreakPoints[n].dllName) == 0) {
+	    bFound = TRUE;
+	    break;
+	}
+    }
+    if (!bFound) {
 	return;
     }
 
@@ -1227,7 +1601,55 @@ OnXLoadDll(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
     p += w;
 
     psh = (PIMAGE_SECTION_HEADER) p;
-    CloseHandle(info->hFile);
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * OnXUnloadDll --
+ *
+ *	This routine is called when a UNLOAD_DLL_DEBUG_EVENT is seen
+ *
+ * Results:
+ *	None
+ *
+ * Side Effects:
+ *	Some information is printed
+ *
+ *----------------------------------------------------------------------
+ */
+
+static void
+OnXUnloadDll(ExpProcess *proc, LPDEBUG_EVENT pDebEvent)
+{
+    Tcl_HashEntry *tclEntry;
+    ExpModule *modPtr;
+
+    /*
+     * Display a message that the DLL has
+     * been unloaded.
+     */
+#if 0
+    fprintf(stderr, "0x%08x: Unloading\n", pDebEvent->u.UnloadDll.lpBaseOfDll);
+#endif
+    
+    tclEntry = Tcl_FindHashEntry(proc->moduleTable,
+	pDebEvent->u.UnloadDll.lpBaseOfDll);
+
+    if (tclEntry != NULL) {
+	modPtr = (ExpModule *) Tcl_GetHashValue(tclEntry);
+	if (modPtr->hFile) {
+	    CloseHandle(modPtr->hFile);
+	}
+	if (modPtr->modName) {
+	    free(modPtr->modName);
+	}
+	if (modPtr->dbgInfo) {
+	    UnmapDebugInformation(modPtr->dbgInfo);
+	}
+	free(modPtr);
+	Tcl_DeleteHashEntry(tclEntry);
+    }
 }
 
 /*
@@ -1251,6 +1673,7 @@ SetBreakpoint(ExpProcess *proc, ExpBreakInfo *info)
 
     tclEntry = Tcl_FindHashEntry(proc->funcTable, info->funcName);
     if (tclEntry == NULL) {
+	EXP_LOG("Unable to set breakpoint at %s", info->funcName);
 	return FALSE;
     }
 
@@ -1338,12 +1761,13 @@ SetBreakpointAtAddr(ExpProcess *proc, ExpBreakInfo *info, PVOID funcPtr)
 
 static void
 OnOpenConsoleW(ExpProcess *proc, ExpThreadInfo *threadInfo,
-    ExpBreakpoint *brkpt, DWORD returnValue, DWORD direction)
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
 {
     WCHAR name[256];
     PVOID ptr;
 
-    if (returnValue == (DWORD) INVALID_HANDLE_VALUE) {
+    LOG_ENTRY("OpenConsoleW");
+    if (*returnValue == (DWORD) INVALID_HANDLE_VALUE) {
 	return;
     }
 
@@ -1359,7 +1783,7 @@ OnOpenConsoleW(ExpProcess *proc, ExpThreadInfo *threadInfo,
 	if (proc->consoleHandlesMax > 100) {
 	    proc->consoleHandlesMax = 100;
 	}
-	proc->consoleHandles[proc->consoleHandlesMax++] = returnValue;
+	proc->consoleHandles[proc->consoleHandlesMax++] = *returnValue;
     }
     return;
 }
@@ -1384,20 +1808,17 @@ OnOpenConsoleW(ExpProcess *proc, ExpThreadInfo *threadInfo,
 
 static void
 OnWriteConsoleA(ExpProcess *proc, ExpThreadInfo *threadInfo,
-    ExpBreakpoint *brkpt, DWORD returnValue, DWORD direction)
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
 {
     CHAR buf[1024];
     PVOID ptr;
-    DWORD n, count;
+    DWORD n;
     PCHAR p;
     BOOL bRet;
-    DWORD dwResult;
 
-#if 0
-    fprintf(stderr, "OnWriteConsoleA\n");
-#endif
+    LOG_ENTRY("WriteConsoleA");
 
-    if (returnValue == 0) {
+    if (*returnValue == 0) {
 	return;
     }
     /*
@@ -1419,13 +1840,7 @@ OnWriteConsoleA(ExpProcess *proc, ExpThreadInfo *threadInfo,
     ReadSubprocessMemory(proc, ptr, p, n * sizeof(CHAR));
     ResetEvent(proc->overlapped.hEvent);
 
-    bRet = WriteFile(HMaster, p, n, &count, &proc->overlapped);
-    if (bRet == FALSE) {
-	dwResult = GetLastError();
-	if (dwResult == ERROR_IO_PENDING) {
-	    bRet = GetOverlappedResult(HMaster, &proc->overlapped, &count, TRUE);
-	}
-    }
+    bRet = ExpWriteMaster(UseSocket, HMaster, p, n, &proc->overlapped);
 
     if (p != buf) {
 	free(p);
@@ -1452,19 +1867,21 @@ OnWriteConsoleA(ExpProcess *proc, ExpThreadInfo *threadInfo,
 
 static void
 OnWriteConsoleW(ExpProcess *proc, ExpThreadInfo *threadInfo,
-    ExpBreakpoint *brkpt, DWORD returnValue, DWORD direction)
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
 {
     WCHAR buf[1024];
     CHAR ansi[2048];
     PVOID ptr;
-    DWORD n, count;
+    DWORD n;
     PWCHAR p;
     PCHAR a;
+    int asize;
     BOOL bRet;
-    DWORD dwResult;
     int w;
 
-    if (returnValue == 0) {
+    LOG_ENTRY("WriteConsoleW");
+
+    if (*returnValue == 0) {
 	return;
     }
 
@@ -1473,32 +1890,183 @@ OnWriteConsoleW(ExpProcess *proc, ExpThreadInfo *threadInfo,
 
     if (n > 1024) {
 	p = malloc(n * sizeof(WCHAR));
-	a = malloc(n * 2 * sizeof(CHAR));
+	asize = n * 2 * sizeof(CHAR);
+	a = malloc(asize);
     } else {
 	p = buf;
 	a = ansi;
+	asize = sizeof(ansi);
     }
     ReadSubprocessMemory(proc, ptr, p, n * sizeof(WCHAR));
     ResetEvent(proc->overlapped.hEvent);
 
     /*
-     * Convert to ASCI and Write the intercepted data to the pipe.
+     * Convert to ASCI and write the intercepted data to the pipe.
      */
 
-    w = WideCharToMultiByte(CP_ACP, 0, buf, n, ansi, sizeof(ansi), NULL, NULL);
-    bRet = WriteFile(HMaster, ansi, w, &count, &proc->overlapped);
-    if (bRet == FALSE) {
-	dwResult = GetLastError();
-	if (dwResult == ERROR_IO_PENDING) {
-	    bRet = GetOverlappedResult(HMaster, &proc->overlapped, &count, TRUE);
-	}
-    }
+    w = WideCharToMultiByte(CP_ACP, 0, p, n, a, asize, NULL, NULL);
+    bRet = ExpWriteMaster(UseSocket, HMaster, a, w, &proc->overlapped);
 
     if (p != buf) {
 	free(p);
 	free(a);
     }
     CursorKnown = FALSE;
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * OnFillConsoleOutputCharacter --
+ *
+ *	This function gets called when an FillConsoleOutputCharacterA
+ *	or FillConsoleOutputCharacterW breakpoint is hit.
+ *
+ * Results:
+ *	None
+ *
+ * Side Effects:
+ *	Prints some output.
+ *
+ *----------------------------------------------------------------------
+ */
+
+static void
+OnFillConsoleOutputCharacter(ExpProcess *proc, ExpThreadInfo *threadInfo,
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
+{
+    CHAR buf[4096];
+    int bufpos;
+    UCHAR c;
+    PVOID ptr;
+    DWORD i;
+    DWORD len;
+    BOOL bRet;
+    COORD coord;
+    DWORD lines, preCols, postCols;
+    BOOL eol, bol;		/* Needs clearing to end, beginning of line */
+    CONSOLE_SCREEN_BUFFER_INFO info;
+
+    LOG_ENTRY("FillConsoleOutputCharacter");
+
+    if (*returnValue == 0) {
+	return;
+    }
+
+    c = (UCHAR) threadInfo->args[1];
+    len = threadInfo->args[2];
+    coord = *((PCOORD) &(threadInfo->args[3]));
+    ptr = (PVOID) threadInfo->args[4];
+    if (ptr) {
+	ReadSubprocessMemory(proc, ptr, &len, sizeof(DWORD));
+    }
+
+    preCols = 0;
+    bufpos = 0;
+    eol = bol = FALSE;
+    if (coord.X) {
+	preCols = ConsoleSize.X - coord.X;
+	if (len <= preCols) {
+	    preCols = len;
+	    len = 0;
+	    if (len == preCols) {
+		eol = TRUE;
+	    }
+	} else {
+	    eol = TRUE;
+	    len -= preCols;
+	}
+    } else if (len < (DWORD) ConsoleSize.X) {
+	bol = TRUE;
+	preCols = len;
+	len = 0;
+    }
+
+    lines = len / ConsoleSize.X;
+    postCols = len % ConsoleSize.X;
+
+    if (preCols) {
+	if (bol) {
+	    /* Beginning of line to before end of line */
+	    if (c == ' ') {
+		wsprintfA(&buf[bufpos], "\033[%d;%dH\033[1K",
+			  coord.Y+1, preCols+coord.X);
+		bufpos += strlen(&buf[bufpos]);
+	    } else {
+		wsprintfA(&buf[bufpos], "\033[%d;%dH",
+			  coord.Y+1, coord.X+1);
+		bufpos += strlen(&buf[bufpos]);
+		memset(&buf[bufpos], c, preCols);
+		bufpos += preCols;
+	    }
+	} else {
+	    /* After beginning of line to end of line */
+	    wsprintfA(&buf[bufpos], "\033[%d;%dH", coord.Y+1, coord.X+1);
+	    bufpos += strlen(&buf[bufpos]);
+	    if (eol && c == ' ') {
+		wsprintfA(&buf[bufpos], "\033[K");
+		bufpos += strlen(&buf[bufpos]);
+	    } else {
+		memset(&buf[bufpos], c, preCols);
+		bufpos += preCols;
+	    }
+	}
+	coord.X = 0;
+	coord.Y++;
+    }
+    if (lines) {
+	if ((c == ' ') && ((lines + coord.Y) >= (DWORD) ConsoleSize.Y)) {
+	    /* Clear to end of screen */
+	    wsprintfA(&buf[bufpos], "\033[%d;%dH\033[J",
+		      coord.Y+1, coord.X+1);
+	    bufpos += strlen(&buf[bufpos]);
+	} else if ((c == ' ') && (coord.Y == 0) && (lines > 0)) {
+	    /* Clear to top of screen */
+	    wsprintfA(&buf[bufpos], "\033[%d;%dH\033[1J", lines, 1);
+	    bufpos += strlen(&buf[bufpos]);
+	} else {
+	    for (i = 0; i < lines; i++) {
+		wsprintfA(&buf[bufpos], "\033[%d;%dH",
+			  coord.Y+i+1, coord.X+1);
+		bufpos += strlen(&buf[bufpos]);
+		if (c == ' ') {
+		    wsprintfA(&buf[bufpos], "\033[2K");
+		    bufpos += strlen(&buf[bufpos]);
+		} else {
+		    memset(&buf[bufpos], c, ConsoleSize.X);
+		    bufpos += ConsoleSize.X;
+		}
+	    }
+	}
+	coord.Y += (SHORT) lines;
+    }
+	
+    if (postCols) {
+	if (c == ' ') {
+	    /* Clear to beginning of line */
+	    wsprintfA(&buf[bufpos], "\033[%d;%dH\033[1K",
+		      coord.Y+1, postCols+coord.X);
+	    bufpos += strlen(&buf[bufpos]);
+	} else {
+	    wsprintfA(&buf[bufpos], "\033[%d;%dH", coord.X+1, coord.Y+1);
+	    bufpos += strlen(&buf[bufpos]);
+	    memset(&buf[bufpos], c, postCols);
+	    bufpos += postCols;
+	}
+    }
+    if (GetConsoleScreenBufferInfo(HConsole, &info) == FALSE) {
+	char errbuf[200];
+	wsprintfA(errbuf, "Call to GetConsoleScreenBufferInfo failed: handle=0x%08x, err=0x%08x", HConsole, GetLastError());
+	EXP_LOG("%s", errbuf);
+    } else {
+	CursorPosition = info.dwCursorPosition;
+	wsprintfA(&buf[bufpos], "\033[%d;%dH",
+		  CursorPosition.Y+1, CursorPosition.X+1);
+	bufpos += strlen(&buf[bufpos]);
+	CursorKnown = TRUE;
+    }
+
+    bRet = ExpWriteMaster(UseSocket, HMaster, buf, bufpos, &proc->overlapped);
 }
 
 /*
@@ -1521,53 +2089,119 @@ OnWriteConsoleW(ExpProcess *proc, ExpThreadInfo *threadInfo,
 void
 CreateVtSequence(ExpProcess *proc, COORD newPos, DWORD n)
 {
-    CONSOLE_SCREEN_BUFFER_INFO consoleInfo;
     COORD oldPos;
     CHAR buf[2048];
     DWORD count;
     BOOL b;
-    DWORD dwResult;
 
     if (n == 0) {
 	return;
     }
 
-    GetConsoleScreenBufferInfo(ExpConsoleOut, &consoleInfo);
-    /* oldPos = consoleInfo.dwCursorPosition; */
     oldPos = CursorPosition;
 
-    b = FALSE;
-    if (CursorKnown) {
-	if (newPos.Y == oldPos.Y && newPos.X <= oldPos.X) {
-	    memset(buf, '\b', oldPos.X - newPos.X);
-	    count = oldPos.X - newPos.X;
-	    b = TRUE;
-	} else if ((newPos.Y > oldPos.Y) && (newPos.X == 0)) {
-	    buf[0] = '\r';
-	    memset(&buf[1], '\n', newPos.Y - oldPos.Y);
-	    count = 1 + newPos.Y - oldPos.Y;
-	    b = TRUE;
-	}
-    }
-    if (!b) {
+    if (CursorKnown && (newPos.Y > oldPos.Y) && (newPos.X == 0)) {
+	buf[0] = '\r';
+	memset(&buf[1], '\n', newPos.Y - oldPos.Y);
+	count = 1 + newPos.Y - oldPos.Y;
+    } else {
 	/* VT100 sequence */
-	wsprintfA(buf, "\033[%d;%dH", newPos.X, newPos.Y);
+	wsprintfA(buf, "\033[%d;%dH", newPos.Y+1, newPos.X+1);
 	count = strlen(buf);
     }
-    newPos.X += (SHORT) (n % 80); /* XXX: Want the console screen buffer width */
-    newPos.Y += (SHORT) (n / 80);
+    newPos.X += (SHORT) (n % ConsoleSize.X);
+    newPos.Y += (SHORT) (n / ConsoleSize.X);
     CursorPosition = newPos;
-    CursorKnown = TRUE;
 
-    b = WriteFile(HMaster, buf, count, &count, &proc->overlapped);
-    if (b == FALSE) {
-	dwResult = GetLastError();
-	if (dwResult == ERROR_IO_PENDING) {
-	    b = GetOverlappedResult(HMaster, &proc->overlapped, &count, TRUE);
-	}
-    }
+    b = ExpWriteMaster(UseSocket, HMaster, buf, count, &proc->overlapped);
 }
 
+/*
+ *----------------------------------------------------------------------
+ *
+ * ExpNewConsoleSequences
+ *
+ *	Sets up a new console.  Sets the scrollable region of
+ *	the window, clears the screen, etc.
+ *
+ * Results:
+ *	None
+ *
+ *----------------------------------------------------------------------
+ */
+void
+ExpNewConsoleSequences(int useSocket, HANDLE hMaster, LPOVERLAPPED over)
+{
+    UCHAR buf[100];
+    DWORD bufpos = 0;
+
+    /* Clear to end of screen */
+    wsprintfA(&buf[bufpos], "\033[%d;%dH\033[J", 1, 1);
+    bufpos += strlen(&buf[bufpos]);
+
+    /* Reset cursor */
+    wsprintfA(&buf[bufpos], "\033[%d;%dH", CursorPosition.Y, CursorPosition.X);
+    bufpos += strlen(&buf[bufpos]);
+    
+    ExpWriteMaster(useSocket, hMaster, buf, bufpos, over);
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * ExpSetConsoleSize --
+ *
+ *	Sets the console to the appropriate size
+ *
+ * Results
+ *	None
+ *
+ *----------------------------------------------------------------------
+ */
+void
+ExpSetConsoleSize(HANDLE hConsoleInW, HANDLE hConsoleOut, int w, int h,
+		  int useSocket, HANDLE hMaster, LPOVERLAPPED over)
+{
+    UCHAR buf[100];
+    DWORD bufpos = 0;
+    COORD largest;
+    SMALL_RECT winrect;
+    INPUT_RECORD resizeRecord;
+    DWORD n;
+
+    largest = GetLargestConsoleWindowSize(hConsoleOut);
+
+    if (w > largest.X) w = largest.X;
+    if (h > largest.Y) h = largest.Y;
+
+    ConsoleSize.X = w;
+    ConsoleSize.Y = h;
+
+    winrect.Left = 0;
+    winrect.Right = w-1;
+    winrect.Top = 0;
+    winrect.Bottom = h-1;
+
+    /* Just in case one depends on the other, do the sequence twice */
+    SetConsoleScreenBufferSize(hConsoleOut, ConsoleSize);
+    SetConsoleWindowInfo(hConsoleOut, TRUE, &winrect);
+    SetConsoleScreenBufferSize(hConsoleOut, ConsoleSize);
+    SetConsoleWindowInfo(hConsoleOut, TRUE, &winrect);
+
+    resizeRecord.EventType = WINDOW_BUFFER_SIZE_EVENT;
+    resizeRecord.Event.WindowBufferSizeEvent.dwSize = ConsoleSize;
+    WriteConsoleInput(hConsoleInW, &resizeRecord, 1, &n);
+
+    /* Set scrollable region*/
+    wsprintfA(&buf[bufpos], "\033[%d;%dr", 1, ConsoleSize.Y);
+    bufpos += strlen(&buf[bufpos]);
+    
+    /* Set scrollable region*/
+    wsprintfA(&buf[bufpos], "\033[%d;%dr", 1, ConsoleSize.Y);
+    bufpos += strlen(&buf[bufpos]);
+    
+    ExpWriteMaster(useSocket, hMaster, buf, bufpos, over);
+}
 
 /*
  *----------------------------------------------------------------------
@@ -1589,16 +2223,17 @@ CreateVtSequence(ExpProcess *proc, COORD newPos, DWORD n)
 
 static void
 OnWriteConsoleOutputCharacterA(ExpProcess *proc, ExpThreadInfo *threadInfo,
-    ExpBreakpoint *brkpt, DWORD returnValue, DWORD direction)
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
 {
     CHAR buf[1024];
     PVOID ptr;
-    DWORD n, count;
+    DWORD n;
     PCHAR p;
     BOOL b;
-    DWORD dwResult;
 
-    if (returnValue == 0) {
+    LOG_ENTRY("WriteConsoleOutputCharacterA");
+
+    if (*returnValue == 0) {
 	return;
     }
     /*
@@ -1623,17 +2258,12 @@ OnWriteConsoleOutputCharacterA(ExpProcess *proc, ExpThreadInfo *threadInfo,
     ReadSubprocessMemory(proc, ptr, p, n * sizeof(CHAR));
     ResetEvent(proc->overlapped.hEvent);
 
-    b = WriteFile(HMaster, p, n, &count, &proc->overlapped);
-    if (b == FALSE) {
-	dwResult = GetLastError();
-	if (dwResult == ERROR_IO_PENDING) {
-	    b = GetOverlappedResult(HMaster, &proc->overlapped, &count, TRUE);
-	}
-    }
+    b = ExpWriteMaster(UseSocket, HMaster, p, n, &proc->overlapped);
 
     if (p != buf) {
 	free(p);
     }
+    CursorKnown = FALSE;
 }
 
 /*
@@ -1655,19 +2285,26 @@ OnWriteConsoleOutputCharacterA(ExpProcess *proc, ExpThreadInfo *threadInfo,
 
 static void
 OnWriteConsoleOutputCharacterW(ExpProcess *proc, ExpThreadInfo *threadInfo,
-    ExpBreakpoint *brkpt, DWORD returnValue, DWORD direction)
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
 {
     WCHAR buf[1024];
     CHAR ansi[2048];
     PVOID ptr;
-    DWORD n, count;
+    DWORD n;
     PWCHAR p;
     PCHAR a;
+    int asize;
     BOOL b;
-    DWORD dwResult;
     int w;
 
-    if (returnValue == 0) {
+    if (direction == EXP_BREAK_IN) {
+	LOG_ENTRY("WriteConsoleOutputCharacterW (in)a");
+	return;
+    } else {
+	LOG_ENTRY("WriteConsoleOutputCharacterW (out)");
+    }
+
+    if (*returnValue == 0) {
 	return;
     }
     /*
@@ -1684,11 +2321,15 @@ OnWriteConsoleOutputCharacterW(ExpProcess *proc, ExpThreadInfo *threadInfo,
 
     if (n > 1024) {
 	p = malloc(n * sizeof(WCHAR));
-	a = malloc(n * 2 * sizeof(CHAR));
+	asize = n * 2 * sizeof(CHAR);
+	a = malloc(asize);
     } else {
 	p = buf;
 	a = ansi;
+	asize = sizeof(ansi);
     }
+
+    ptr = (PVOID) threadInfo->args[1];
     ReadSubprocessMemory(proc, ptr, p, n * sizeof(WCHAR));
     ResetEvent(proc->overlapped.hEvent);
 
@@ -1696,21 +2337,45 @@ OnWriteConsoleOutputCharacterW(ExpProcess *proc, ExpThreadInfo *threadInfo,
      * Convert to ASCI and Write the intercepted data to the pipe.
      */
 
-    w = WideCharToMultiByte(CP_ACP, 0, buf, n, ansi, sizeof(ansi), NULL, NULL);
-    b = WriteFile(HMaster, ansi, w, &count, &proc->overlapped);
-    if (b == FALSE) {
-	dwResult = GetLastError();
-	if (dwResult == ERROR_IO_PENDING) {
-	    b = GetOverlappedResult(HMaster, &proc->overlapped, &count, TRUE);
-	}
-    }
+    w = WideCharToMultiByte(CP_ACP, 0, p, n, a, asize, NULL, NULL);
+    b = ExpWriteMaster(UseSocket, HMaster, a, w, &proc->overlapped);
+
+#if 0
+    a[w] = 0;
+    ExpSyslog("WCOCW: Writing %s", a);
+#endif
 
     if (p != buf) {
 	free(p);
 	free(a);
     }
+    CursorKnown = FALSE;
 }
 
+/*
+ *----------------------------------------------------------------------
+ *
+ * OnReadConsoleInput --
+ *
+ *	This function gets called when a ReadConsoleInput breakpoint
+ *	is hit.
+ *
+ * Results:
+ *	None
+ *
+ * Notes:
+ *	If this is ever used for real, there need to be ASCII
+ *	and UNICODE versions.
+ *
+ *----------------------------------------------------------------------
+ */
+
+static void
+OnReadConsoleInput(ExpProcess *proc, ExpThreadInfo *threadInfo,
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
+{
+    LOG_ENTRY("ReadConsoleInput");
+}
 
 /*
  *----------------------------------------------------------------------
@@ -1732,12 +2397,15 @@ OnWriteConsoleOutputCharacterW(ExpProcess *proc, ExpThreadInfo *threadInfo,
 
 static void
 OnSetConsoleMode(ExpProcess *proc, ExpThreadInfo *threadInfo,
-    ExpBreakpoint *brkpt, DWORD returnValue, DWORD direction)
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
 {
     DWORD i;
     BOOL found;
 
-    if (returnValue == FALSE) {
+    LOG_ENTRY("SetConsoleMode");
+
+    /* The console mode seems to get set even if the return value is FALSE */
+    if (*returnValue == FALSE) {
 	return;
     }
     for (found = FALSE, i = 0; i < proc->consoleHandlesMax; i++) {
@@ -1749,6 +2417,37 @@ OnSetConsoleMode(ExpProcess *proc, ExpThreadInfo *threadInfo,
     if (found) {
 	ExpConsoleInputMode = threadInfo->args[1];
     }
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * OnSetConsoleActiveScreenBuffer --
+ *
+ *	This function gets called when a SetConsoleActiveScreenBuffer
+ *	breakpoint is hit.
+ *
+ * Results:
+ *	None
+ *
+ * Side Effects:
+ *	We reread the entire console and send it to the master.
+ *	Updates the current console cursor position
+ *
+ *----------------------------------------------------------------------
+ */
+
+static void
+OnSetConsoleActiveScreenBuffer(ExpProcess *proc, ExpThreadInfo *threadInfo,
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
+{
+    LOG_ENTRY("SetConsoleActiveScreenBuffer");
+
+    if (*returnValue == FALSE) {
+	return;
+    }
+
+    RefreshScreen(&proc->overlapped);
 }
 
 /*
@@ -1770,29 +2469,123 @@ OnSetConsoleMode(ExpProcess *proc, ExpThreadInfo *threadInfo,
 
 static void
 OnSetConsoleCursorPosition(ExpProcess *proc, ExpThreadInfo *threadInfo,
-    ExpBreakpoint *brkpt, DWORD returnValue, DWORD direction)
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
 {
     BOOL b;
     CHAR buf[50];
     DWORD count;
-    DWORD dwResult;
 
-    if (returnValue == FALSE) {
+    LOG_ENTRY("SetConsoleCursorPosition");
+
+    if (*returnValue == FALSE) {
 	return;
     }
     CursorPosition = *((PCOORD) &threadInfo->args[1]);
-    CursorKnown = TRUE;
 
-    wsprintfA(buf, "\033[%d;%dH", CursorPosition.X, CursorPosition.Y);
+    wsprintfA(buf, "\033[%d;%dH", CursorPosition.Y+1, CursorPosition.X+1);
     count = strlen(buf);
-    b = WriteFile(HMaster, buf, count, &count, &proc->overlapped);
-    if (b == FALSE) {
-	dwResult = GetLastError();
-	if (dwResult == ERROR_IO_PENDING) {
-	    b = GetOverlappedResult(HMaster, &proc->overlapped, &count, TRUE);
+    b = ExpWriteMaster(UseSocket, HMaster, buf, count, &proc->overlapped);
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * OnSetConsoleWindowInfo --
+ *
+ *	This function gets called when a SetConsoleWindowInfo breakpoint
+ *	is hit.
+ *
+ * Results:
+ *	None
+ *
+ * Side Effects:
+ *	Updates the current console cursor position
+ *
+ *----------------------------------------------------------------------
+ */
+
+static void
+OnSetConsoleWindowInfo(ExpProcess *proc, ExpThreadInfo *threadInfo,
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
+{
+    LOG_ENTRY("SetConsoleWindowInfo");
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * OnScrollConsoleScreenBuffer --
+ *
+ *	This funtions gets called when a ScrollConsoleScreenBuffer
+ *	breakpoint is hit.
+ *
+ * Results:
+ *	None
+ *
+ * Side Effects:
+ *	Generate some VT100 sequences to insert lines
+ *
+ * Notes:
+ *	XXX: Ideally, we should check if the screen buffer is the one that
+ *	is currently being displayed.  However, that means we have to
+ *	track CONOUT$ handles, so we don't do it for now.
+ *
+ *----------------------------------------------------------------------
+ */
+
+void
+OnScrollConsoleScreenBuffer(ExpProcess *proc, ExpThreadInfo *threadInfo,
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
+{
+    BOOL b;
+    CHAR buf[100];
+    DWORD count = 0;
+    SMALL_RECT scroll, clip, *pClip;
+    COORD dest;
+    CHAR_INFO fill;
+    CHAR c;
+    PVOID ptr;
+    LOG_ENTRY("ScrollConsoleScreenBuffer");
+
+    if (*returnValue == FALSE) {
+	return;
+    }
+    ptr = (PVOID) threadInfo->args[1];
+    ReadSubprocessMemory(proc, ptr, &scroll, sizeof(SMALL_RECT));
+    ptr = (PVOID) threadInfo->args[2];
+    pClip = NULL;
+    if (ptr) {
+	pClip = &clip;
+	ReadSubprocessMemory(proc, ptr, &clip, sizeof(SMALL_RECT));
+    }
+    dest = *((PCOORD) &threadInfo->args[3]);
+    ptr = (PVOID) threadInfo->args[4];
+    ReadSubprocessMemory(proc, ptr, &fill, sizeof(CHAR_INFO));
+    c = fill.Char.AsciiChar;
+
+    /* Check for a full line scroll */
+    if (c == ' ' && scroll.Left == dest.X &&
+	scroll.Left == 0 && scroll.Right >= ConsoleSize.X-1)
+    {
+	if (dest.Y < scroll.Top) {
+	    wsprintfA(&buf[count], "\033[%d;%dr\033[%d;%dH\033[%dM",
+		      dest.Y+1,scroll.Bottom+1,dest.Y+1,1,
+		      scroll.Top - dest.Y);
+	} else {
+	    wsprintfA(&buf[count], "\033[%d;%dr\033[%d;%dH\033[%dL",
+		      scroll.Top+1,dest.Y+1+(scroll.Bottom - scroll.Top),
+		      scroll.Top+1,1,
+		      dest.Y - scroll.Top);
 	}
+	count = strlen(&buf[count]);
+	wsprintf(&buf[count], "\033[%d;%dr", 1, ConsoleSize.Y);
+	count += strlen(&buf[count]);
+	b = ExpWriteMaster(UseSocket, HMaster, buf, count, &proc->overlapped);
+    } else {
+	RefreshScreen(&proc->overlapped);
     }
 }
+
 
 /*
  *----------------------------------------------------------------------
@@ -1814,19 +2607,19 @@ OnSetConsoleCursorPosition(ExpProcess *proc, ExpThreadInfo *threadInfo,
 
 static void
 OnGetStdHandle(ExpProcess *proc, ExpThreadInfo *threadInfo,
-    ExpBreakpoint *brkpt, DWORD returnValue, DWORD direction)
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
 {
     DWORD i;
     BOOL found;
 
-    if (returnValue == (DWORD) INVALID_HANDLE_VALUE) {
+    if (*returnValue == (DWORD) INVALID_HANDLE_VALUE) {
 	return;
     }
     if (threadInfo->args[0] != STD_INPUT_HANDLE) {
 	return;
     }
     for (found = FALSE, i = 0; i < proc->consoleHandlesMax; i++) {
-	if (proc->consoleHandles[i] == returnValue) {
+	if (proc->consoleHandles[i] == *returnValue) {
 	    found = TRUE;
 	    break;
 	}
@@ -1835,9 +2628,159 @@ OnGetStdHandle(ExpProcess *proc, ExpThreadInfo *threadInfo,
 	if (proc->consoleHandlesMax > 100) {
 	    proc->consoleHandlesMax = 100;
 	}
-	proc->consoleHandles[proc->consoleHandlesMax++] = returnValue;
+	proc->consoleHandles[proc->consoleHandlesMax++] = *returnValue;
     }
     return;
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * OnBeep --
+ *
+ *	This routine gets called when Beep is called.  At least in sshd,
+ *	we don't want a beep to show up on the local console.  Instead,
+ *	direct it back to the master with a ASCII 7.
+ *
+ * Results:
+ *	None
+ *
+ * Notes:
+ *	XXX: Setting the duration to 0 doesn't seem to make the local
+ *	beep go away.  It seems we need to stop the call at this point
+ *	(or point it to some other call with the same number of arguments)
+ *
+ *----------------------------------------------------------------------
+ */
+
+static void
+OnBeep(ExpProcess *proc, ExpThreadInfo *threadInfo,
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
+{
+    CHAR buf[50];
+
+    LOG_ENTRY("Beep");
+
+    if (direction == EXP_BREAK_IN) {
+	/* Modify the arguments so a beep doesn't sound on the server */
+	threadInfo->args[1] = 0;
+    } else if (direction == EXP_BREAK_OUT) {
+	if (*returnValue == 0) {
+	    buf[0] = 7; /* ASCII beep */
+	    ExpWriteMaster(UseSocket, HMaster, buf, 1, &proc->overlapped);
+	}
+    }
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * RefreshScreen --
+ *
+ *	Redraw the entire screen
+ *
+ * Results:
+ *	None
+ *
+ *----------------------------------------------------------------------
+ */
+static void
+RefreshScreen(LPOVERLAPPED over)
+{
+    CONSOLE_SCREEN_BUFFER_INFO info;
+    UCHAR buf[4096];
+    DWORD bufpos = 0;
+    CHAR_INFO consoleBuf[4096];
+    COORD size = {ConsoleSize.X, ConsoleSize.Y};
+    COORD begin = {0, 0};
+    SMALL_RECT rect = {0, 0, ConsoleSize.X-1, ConsoleSize.Y-1};
+    BOOL b;
+    int x, y, prespaces, postspaces, offset;
+
+    LOG_ENTRY("SetConsoleActiveScreenBuffer");
+
+    /* Clear the screen */
+    wsprintfA(&buf[bufpos], "\033[2J");
+    bufpos += strlen(&buf[bufpos]);
+
+    wsprintfA(&buf[bufpos], "\033[%d;%dH",
+	      CursorPosition.Y+1, CursorPosition.X+1);
+    bufpos += strlen(&buf[bufpos]);
+    CursorKnown = TRUE;
+
+    b = ExpWriteMaster(UseSocket, HMaster, buf, bufpos, over);
+    bufpos = 0;
+
+    if (GetConsoleScreenBufferInfo(HConsole, &info) != FALSE) {
+	return;
+    }
+
+    CursorPosition = info.dwCursorPosition;
+
+    if (! ReadConsoleOutput(HConsole, consoleBuf, size, begin, &rect)) {
+	return;
+    }
+
+    offset = 0;
+    for (y = 0; y < ConsoleSize.Y; y++) {
+	offset += ConsoleSize.X;
+	for (x = 0; x < ConsoleSize.X; x++) {
+	    if (consoleBuf[offset+x].Char.AsciiChar != ' ') {
+		break;
+	    }
+	}
+	prespaces = x;
+	if (prespaces == ConsoleSize.X) {
+	    continue;
+	}
+
+	for (x = ConsoleSize.X-1; x >= 0; x--) {
+	    if (consoleBuf[offset+x].Char.AsciiChar != ' ') {
+		break;
+	    }
+	}
+	postspaces = x;
+	wsprintfA(&buf[bufpos], "\033[%d;%dH", y+1, prespaces+1);
+
+	for (x = prespaces; x < postspaces; x++) {
+	    buf[bufpos] = consoleBuf[offset+x].Char.AsciiChar;
+	    bufpos++;
+	}
+    }
+
+    wsprintfA(&buf[bufpos], "\033[%d;%dH",
+	      CursorPosition.Y+1, CursorPosition.X+1);
+    bufpos += strlen(&buf[bufpos]);
+    CursorKnown = TRUE;
+    b = ExpWriteMaster(UseSocket, HMaster, buf, bufpos, over);
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * OnIsWindowVisible --
+ *
+ *	This routine gets called when IsWindowVisible is called.
+ *	The MKS Korn shell uses this as an indication of a window
+ *	that can be seen by the user.  If the window can't be seen,
+ *	it pops up a graphical error notification.  We really, really
+ *	don't want those damn things popping up, so this helps avoid
+ *	it.  And there really doesn't seem to be any good reason to
+ *	return FALSE given that nobody is ever going to see anything.
+ *
+ * Results:
+ *	None
+ *
+ *----------------------------------------------------------------------
+ */
+
+static void
+OnIsWindowVisible(ExpProcess *proc, ExpThreadInfo *threadInfo,
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
+{
+    LOG_ENTRY("IsWindowVisible");
+
+    *returnValue = TRUE;
 }
 
 /*
@@ -1932,7 +2875,8 @@ ReadSubprocessMemory(ExpProcess *proc, LPVOID addr, LPVOID buf, DWORD len)
 {
     DWORD oldProtection = 0;
     MEMORY_BASIC_INFORMATION mbi;
-    BOOL ret = TRUE;
+    BOOL ret;
+    LONG error;
 
     /* if not committed memory abort */
     if (!VirtualQueryEx(proc->hProcess, addr, &mbi, sizeof(mbi)) ||
@@ -1946,13 +2890,15 @@ ReadSubprocessMemory(ExpProcess *proc, LPVOID addr, LPVOID buf, DWORD len)
 	VirtualProtectEx(proc->hProcess, addr, len, PAGE_READONLY, &oldProtection);
     }
     
-    if (!ReadProcessMemory(proc->hProcess, addr, buf, len, NULL)) {
-	ret = FALSE;
+    ret = ReadProcessMemory(proc->hProcess, addr, buf, len, NULL);
+    if (ret == FALSE) {
+	error = GetLastError();
     }
     
     /* reset protection if changed */
     if (oldProtection) {
 	VirtualProtectEx(proc->hProcess, addr, len, oldProtection, &oldProtection);
+	SetLastError(error);
     }
     return ret;
 }
@@ -2047,14 +2993,14 @@ WriteSubprocessMemory(ExpProcess *proc, LPVOID addr, LPVOID buf, DWORD len)
 
 void
 OnWriteConsoleOutput(ExpProcess *proc, ExpThreadInfo *threadInfo,
-    ExpBreakpoint *brkpt, DWORD returnValue, DWORD direction)
+    ExpBreakpoint *brkpt, PDWORD returnValue, DWORD direction)
 {
     CHAR buf[1024];
     PVOID ptr;
-    DWORD n, count;
-    PCHAR p;
+    DWORD n;
+    PCHAR p, end;
+    int maxbuf;
     BOOL b;
-    DWORD dwResult;
     COORD bufferSize;
     COORD bufferCoord;
     COORD curr;
@@ -2062,7 +3008,9 @@ OnWriteConsoleOutput(ExpProcess *proc, ExpThreadInfo *threadInfo,
     CHAR_INFO *charBuf, *pcb;
     SHORT x, y;
 
-    if (returnValue == 0) {
+    LOG_ENTRY("WriteConsoleOutput");
+
+    if (*returnValue == 0) {
 	return;
     }
 
@@ -2077,37 +3025,50 @@ OnWriteConsoleOutput(ExpProcess *proc, ExpThreadInfo *threadInfo,
 
     n = bufferSize.X * bufferSize.Y * sizeof(CHAR_INFO);
     charBuf = malloc(n);
+
+#if 0
+    wsprintfA((char *) charBuf, "writeRegion: (%d,%d) to (%d,%d)   bufferCoord: (%d,%d)   bufferSize: (%d,%d)", writeRegion.Left, writeRegion.Top, writeRegion.Right, writeRegion.Bottom, bufferCoord.X, bufferCoord.Y, bufferSize.X, bufferSize.Y);
+    ExpSyslog("Debug 0: %s", charBuf);
+#endif
+
     ReadSubprocessMemory(proc, ptr, charBuf, n);
 
     pcb = charBuf;
     for (y = 0; y <= writeRegion.Bottom - writeRegion.Top; y++) {
 	pcb = charBuf;
-	pcb += ((y + bufferCoord.Y) * bufferSize.X * sizeof(CHAR_INFO));
-	pcb += (bufferCoord.X * sizeof(CHAR_INFO));
+	pcb += (y + bufferCoord.Y) * bufferSize.X;
+	pcb += bufferCoord.X;
 	p = buf;
+	maxbuf = sizeof(buf);
+	end = buf + maxbuf;
 	for (x = 0; x <= writeRegion.Right - writeRegion.Left; x++, pcb++) {
 #ifdef UNICODE
 	    *p++ = (CHAR) (pcb->Char.UnicodeChar & 0xff);
 #else
 	    *p++ = pcb->Char.AsciiChar;
 #endif
+	    if (p == end) {
+		ResetEvent(proc->overlapped.hEvent);
+		b = ExpWriteMaster(UseSocket, HMaster, buf, maxbuf, &proc->overlapped);
+		p = buf;
+	    }
 	}
 	curr.X = writeRegion.Left;
 	curr.Y = writeRegion.Top + y;
-	n = p - buf;
+	n = writeRegion.Right - writeRegion.Left;
 	CreateVtSequence(proc, curr, n);
 	ResetEvent(proc->overlapped.hEvent);
 
-	b = WriteFile(HMaster, buf, n, &count, &proc->overlapped);
-	if (b == FALSE) {
-	    dwResult = GetLastError();
-	    if (dwResult == ERROR_IO_PENDING) {
-		b = GetOverlappedResult(HMaster, &proc->overlapped, &count, TRUE);
-	    }
-	}
+	maxbuf = p - buf;
+	b = ExpWriteMaster(UseSocket, HMaster, buf, maxbuf, &proc->overlapped);
+	buf[maxbuf] = 0;
+#if 0
+	ExpSyslog("Writing %s", buf);
+#endif
     }
 
     free(charBuf);
+    LOG_EXIT("WriteConsoleOutput");
 }
 
 /*

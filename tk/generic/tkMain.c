@@ -13,7 +13,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkMain.c 1.153 97/04/25 16:51:43
+ * SCCS: @(#) tkMain.c 1.154 97/08/29 10:40:43
  */
 
 #include <ctype.h>
@@ -271,7 +271,6 @@ StdinProc(clientData, mask)
     (void) Tcl_DStringAppend(&command, Tcl_DStringValue(&line), -1);
     cmd = Tcl_DStringAppend(&command, "\n", -1);
     Tcl_DStringFree(&line);
-    
     if (!Tcl_CommandComplete(cmd)) {
         gotPartial = 1;
         goto prompt;
@@ -288,8 +287,12 @@ StdinProc(clientData, mask)
 
     Tcl_CreateChannelHandler(chan, 0, StdinProc, (ClientData) chan);
     code = Tcl_RecordAndEval(interp, cmd, TCL_EVAL_GLOBAL);
-    Tcl_CreateChannelHandler(chan, TCL_READABLE, StdinProc,
-	    (ClientData) chan);
+    
+    chan = Tcl_GetStdChannel(TCL_STDIN);
+    if (chan) {
+	Tcl_CreateChannelHandler(chan, TCL_READABLE, StdinProc,
+		(ClientData) chan);
+    }
     Tcl_DStringFree(&command);
     if (*interp->result != 0) {
 	if ((code != TCL_OK) || (tty)) {

@@ -1,0 +1,41 @@
+==========
+win/README
+==========
+
+To build BLT 8.x-unoff for Win32, please follow these instructions:
+
+- make sure you have already successfully compiled Tcl and Tk 8.x (you can
+  get them from ftp://ftp.smli.com/pub/tcl); it's not necessary to install
+  Tcl/Tk 8.x on your system in order to build BLT (note that you need the
+  _source_ distribution of Tcl/Tk; the binary distribution won't do!)
+
+- modify "makefile.vc" and "mkfiles/makefile.ini" as necessary; then type
+  "nmake -f makefile.vc" to generate "bltwish8x.exe" and "blt8x.dll" (you
+  might have noticed that these instructions are only valid if you have
+  MSVC++; I'm patiently waiting for someone to send me the appropriate
+  makefiles for BC++, Watcom and other Win32-capable compilers)
+
+- if you need BLT's "drag&drop" facilities, you might want to take a look
+  at the stuff contained in the "win/unsupported" directory; as the name
+  "unsupported" implies, you're (almost) completely on your own here
+
+- to run the demos, I recommend to first copy the Tcl/Tk DLLs to this "win"
+  directory and to set the {TCL,TK,BLT}_LIBRARY environment variables to
+  the appropriate directory names; now type ".\bltwish8x" to fire up the
+  BLT-aware "wish" program and then, as soon as the console window appears,
+  "cd ../demos; source xxx", where xxx is the file name of the demo you'd
+  like to run (such as graph, barchart or htext)
+
+As of this release, the following BLT commands seem to work under Win32:
+"barchart", "bitmap", "bltdebug", "drag&drop", "graph", "htext", "piechart",
+"spline", "table", "vector", "watch" and "winop". If you'd like to help
+porting the remaining commands (or fixing what's not fully working yet),
+please let me know. I'm not a Win hacker, so I'm happy for all help and
+code that I can get from you.
+
+Please send all comments, complaints, bug reports, patches etc. concerning
+the "unoff" releases of BLT to mike@hightec.saarlink.de (Michael Schumacher).
+
+
+Good luck & have fun,
+mike

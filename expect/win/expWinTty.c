@@ -25,6 +25,7 @@ char *exp_dev_tty_id = "exp_tty";
 int exp_stdin_is_tty;
 int exp_stdout_is_tty;
 
+static int consoleInitialized = FALSE;
 static DWORD originalConsoleOutMode;
 static DWORD originalConsoleInMode;
 static DWORD consoleOutMode;
@@ -35,12 +36,18 @@ static HANDLE hConsoleIn;
 int
 exp_israw()
 {
+    if (! consoleInitialized) {
+	return 0;
+    }
     return !(consoleOutMode & ENABLE_PROCESSED_OUTPUT);
 }
 
 int
 exp_isecho()
 {
+    if (! consoleInitialized) {
+	return 1;
+    }
     return consoleInMode & ENABLE_ECHO_INPUT;
 }
 
@@ -65,17 +72,15 @@ void
 exp_tty_raw(set)
     int set;
 {
-    if (set == 1) {
-	if (consoleOutMode & ENABLE_PROCESSED_OUTPUT) {
-	    consoleOutMode &= ~ENABLE_PROCESSED_OUTPUT;
-	    SetConsoleMode(hConsoleOut, consoleOutMode);
-	}
-    } else {
-	if (! (consoleOutMode & ENABLE_PROCESSED_OUTPUT)) {
-	    consoleOutMode |= ENABLE_PROCESSED_OUTPUT;
-	    SetConsoleMode(hConsoleOut, consoleOutMode);
-	}
+    if (! consoleInitialized) {
+	return;
     }
+    if (set == 1) {
+	consoleOutMode &= ~ENABLE_PROCESSED_OUTPUT;
+    } else {
+	consoleOutMode |= ENABLE_PROCESSED_OUTPUT;
+    }
+    SetConsoleMode(hConsoleOut, consoleOutMode);
 }
 
 /*
@@ -99,17 +104,15 @@ void
 exp_tty_echo(set)
     int set;
 {
-    if (set == 1) {
-	if (! (consoleInMode & ENABLE_ECHO_INPUT)) {
-	    consoleInMode |= ENABLE_ECHO_INPUT;
-	    SetConsoleMode(hConsoleIn, consoleInMode);
-	}
-    } else {
-	if (consoleInMode & ENABLE_ECHO_INPUT) {
-	    consoleInMode &= ~ENABLE_ECHO_INPUT;
-	    SetConsoleMode(hConsoleIn, consoleInMode);
-	}
+    if (! consoleInitialized) {
+	return;
     }
+    if (set == 1) {
+	consoleInMode |= ENABLE_ECHO_INPUT;
+    } else {
+	consoleInMode &= ~ENABLE_ECHO_INPUT;
+    }
+    SetConsoleMode(hConsoleIn, consoleInMode);
 }
 
 /*
@@ -427,13 +430,18 @@ exp_init_pty(interp)
     /*
      * Get the original console modes
      */
-    GetConsoleMode(hOut, &originalConsoleOutMode);
+    if (GetConsoleMode(hOut, &originalConsoleOutMode) == FALSE) {
+	return;
+    }
     consoleOutMode = originalConsoleOutMode;
     hConsoleOut = hOut;
 
-    GetConsoleMode(hIn, &originalConsoleInMode);
+    if (GetConsoleMode(hIn, &originalConsoleInMode) == FALSE) {
+	return;
+    }
     consoleInMode = originalConsoleInMode;
     hConsoleIn = hIn;
+    consoleInitialized = TRUE;
 }
 
 /*

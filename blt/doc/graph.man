@@ -1,0 +1,1776 @@
+'\"
+'\" Copyright 1991-1997 by AT&T Bell Laboratories.
+'\"
+'\" Permission to use, copy, modify, and distribute this software
+'\" and its documentation for any purpose and without fee is hereby
+'\" granted, provided that the above copyright notice appear in all
+'\" copies and that both that the copyright notice and warranty
+'\" disclaimer appear in supporting documentation, and that the
+'\" names of AT&T Bell Laboratories any of their entities not be used
+'\" in advertising or publicity pertaining to distribution of the
+'\" software without specific, written prior permission.
+'\"
+'\" AT&T disclaims all warranties with regard to this software, including
+'\" all implied warranties of merchantability and fitness.  In no event
+'\" shall AT&T be liable for any special, indirect or consequential
+'\" damages or any damages whatsoever resulting from loss of use, data
+'\" or profits, whether in an action of contract, negligence or other
+'\" tortuous action, arising out of or in connection with the use or
+'\" performance of this software.
+'\"
+'\" Graph widget created by Sani Nassif and George Howlett.
+'\"
+.so man.macros
+.HS graph BLT
+.BS
+'\" Note:  do not modify the .SH NAME line immediately below!
+.SH NAME
+graph \-  2D graph for plotting x and y coordinate data.
+.SH SYNOPSIS
+\fBgraph\fI \fIpathName \fR?\fIoption value\fR?...
+.BE
+.SH DESCRIPTION
+The \fBgraph\fR command creates a graph for plotting
+two-dimensional data (x,y coordinates). It has many configurable
+components: coordinate axes, elements, legend, grid lines, cross
+hairs, etc.  They allow you to customize the look and feel of the
+graph.
+.SH INTRODUCTION
+The \fBgraph\fR command creates a new window for plotting
+two-dimensional data (x,y coordinates).  Data points are plotted in a
+box displayed in the center of the new window.  This is the
+\fIplotting area\fR.  The graph's coordinate axes are displayed in the
+margins around the plotting area.  By default, the legend is displayed
+in the right margin.  The title is displayed in top margin.
+.PP
+A graph has several components: coordinate axes, elements, legend,
+grid, cross hairs, postscript, and markers.  Each component can be
+queried and configured.
+.TP 1i
+\fBAxes\fR 
+The \fBgraph\fR widget has four coordinate axes: two x-coordinate and two
+y-coordinate axes.  The axes control what region of data is displayed
+and how the data is scaled. Each axis consists of the axis line,
+title, major and minor ticks, and tick labels.  Tick labels display
+the value of each major tick.
+.TP 1i
+\fBElements\fR 
+An element represents a set of data to be plotted.  It contains an x
+and y vector of values representing the data coordinates.  Elements
+can be plotted with a symbol at each data point and lines connecting
+the points.  The appearance of the element, such as its symbol, line
+width, and color is configurable.
+.TP 1i
+\fBLegend\fR 
+The legend displays the name and symbol of each data element.  The
+legend can be displayed in any margin or in the plotting area itself.
+.TP 1i
+\fBMarkers\fR
+Markers come in various forms: text strings, bitmaps, connected line
+segments, polygons, or embedded widgets (windows).  They can be used
+to annotate or highlight areas of the graph. For example, you could
+use a polygon marker to fill an area under a curve, or a text marker
+to label a particular data point.
+.TP 1i
+\fBPostscript\fR
+The \fBgraph\fR widget can generate encapsulated PostScript output. There are
+several options to configure the PostScript output.
+.TP 1i
+\fBCross hairs\fR
+The \fBgraph\fR widget has built-in cross hairs.  They can be turned on and off.
+They are used to finely control the movement of the pointer in the
+graph.
+.TP 1i
+\fBGrid lines\fR
+Grid lines extend from the major and minor ticks of each axis
+horizontally or vertically across the plotting area.
+.SH EXAMPLE
+The \fBgraph\fR command creates a new graph.  
+.DS
+# Create a new graph.  Plotting area is black.
+graph .graph -plotbackground black
+.DE
+A new Tcl command \fC.graph\fR is created.  This command can be used
+to perform various operations to query and modify the graph.  For
+example, to change the title of the graph to "My Plot", you use the
+new command and the \fBconfigure\fR operation.
+.DS
+# Change the title of the graph.
+\&.graph configure -title "My Plot"
+.DE
+To add data elements to the graph, you use the command and the
+\fBelement\fR operation.
+.DS
+# Create a new element named "line1"
+\&.graph element create line1 \\
+	-xdata { 0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0 } \\
+	-ydata { 26.18 50.46 72.85 93.31 111.86 128.47 143.14 
+		155.85 166.60 175.38 }
+.DE
+The element's x and y coordinates are specified using lists of
+numbers.  Alternately, BLT vectors could be used to hold the x and y
+coordinates.
+.DS
+# Create two vectors and add them to the graph.
+vector xVector yVector
+xVector set { 0.2 0.4 0.6 0.8 1.0 1.2 1.4 1.6 1.8 2.0 }
+yVector set { 26.18 50.46 72.85 93.31 111.86 128.47 143.14 155.85 
+	166.60 175.38 }
+\&.graph element create line1 -xdata xVector -ydata yVector
+.DE
+The advantage of using vectors is that when you modify one, the \fBgraph\fR
+is automatically redrawn to reflect the new values.
+.DS
+# Change the x and y coordinates of the first point.
+set xVector(0) 0.18
+set yVector(0) 25.18
+.DE
+An element named \fCline1\fR is now created in \fC.graph\fR.  By
+default, the element's label in the legend will be also \fCline1\fR.
+You can change the label, or specify no legend entry, again using the
+element's \fBconfigure\fR operation.
+.DS
+# Don't display "line1" in the legend.
+\&.graph element configure line1 -label ""
+.DE
+You can configure more than just the element's label.  An element has
+many attributes such as symbol type and size, dashed or solid lines,
+colors, line width, etc.
+.DS
+\&.graph element configure line1 -symbol square -color red \\
+	-dashes { 2 4 2 } -linewidth 2 -pixels 2c
+.DE
+There are four coordinate axes in the \fBgraph\fR widget. Their names
+are \fCx\fR, \fCx2\fR, \fCy\fR, and \fCy2\fR.  By default, elements
+are mapped onto the standard (\fCx\fR and \fCy\fR) axes.  This can be
+changed with the \fB\-mapx\fR and \fB\-mapy\fR options.
+.DS
+# Map "line1" on the alternate y axis "y2".
+\&.graph element configure line1 -mapy y2
+.DE
+Axes can be configured in many ways too.  Each axis has an operation
+associated with it: \fBxaxis\fR, \fBx2axis\fR, \fByaxis\fR, and
+\fBy2axis\fR.  For example, you change the scale of the y-axis from
+linear to log using the \fByaxis\fR operation.
+.DS
+# Y-axis is log scale.
+\&.graph yaxis configure -logscale yes
+.DE
+One of the most important ways axes are used is to zoom in on a
+particular data region.  Zooming is done by simply specifying new axis
+limits using the \fB\-min\fR and \fB\-max\fR configuration options.
+.DS
+# Zoom in 
+\&.graph xaxis configure -min 1.0 -max 1.5
+\&.graph yaxis configure -min 12.0 -max 55.15
+.DE
+To zoom interactively, you link the \fBconfigure\fR operations with
+some user interaction (such as pressing the mouse button), using the
+\fBbind\fR command.  To convert between screen and graph coordinates,
+use the \fBinvtransform\fR operation.
+.DS
+# Click the button to set a new minimum 
+bind .graph <B1> { 
+    %W xaxis configure -min [%W xaxis invtransform %x]
+    %W yaxis configure -min [%W yaxis invtransform %y]
+}
+.DE
+By default, the limits of the axis are determined from data values.
+To reset back to the default limits, set the \fB\-min\fR and
+\fB\-max\fR options to the empty value.
+.DS
+# Reset the axes to autoscale again.
+\&.graph xaxis configure -min {} -max {}
+\&.graph yaxis configure -min {} -max {}
+.DE
+By default, the legend is displayed in the right margin.  You can
+change this any many other legend configuration options using the
+\fBlegend\fR operation.
+.DS
+# Configure the legend font, color, and relief
+\&.graph legend configure -position left -relief raised \\
+	-font fixed -fg blue
+.DE
+The prevent the legend from being displayed, turn off the
+\fB\-mapped\fR option.
+.DS
+# Don't display the legend.
+\&.graph legend configure -mapped no\fR
+.DE
+The \fBgraph\fR widget has simple drawing procedures called markers.
+They can be used to highlight or annotate data in the graph. The types
+of markers available are bitmaps, polygons, lines, or windows.
+Markers can be used, for example, to mark or brush points.  In this
+example, is a text marker which labels the data first point.  Markers
+are created using the \fBmarker\fR operation.
+.DS
+# Create a label for the first data point of "line1".
+\&.graph marker create text -name first_marker -coords { 0.2 26.18 } \\
+	-text "start" -anchor se -xoffset -10 -yoffset -10
+.DE
+This creates a text marker named \fCfirst_marker\fR.  It will display
+the text "start" near the coordinates of the first data point.  The
+\fB\-anchor\fR, \fB\-xoffset\fR, and \fB\-yoffset\fR options are used
+to display the marker above and to the left of the data point, so that
+the actual data point isn't covered by the marker.  By default,
+markers are drawn last, on top of data.  You can change this with the
+\fB\-under\fR option.
+.DS
+# Draw the label before elements are drawn.
+\&.graph marker configure first_marker -under yes
+.DE
+You can add cross hairs or grid lines using the \fBcrosshairs\fR and
+\fBgrid\fR operations.
+.DS
+# Display both cross hairs and grid lines.
+\&.graph crosshairs configure -mapped yes -color red
+\&.graph grid configure -mapped yes -dashes { 2 2 }
+.DE
+Finally, to get hardcopy of the graph, use the \fBpostscript\fR
+operation.
+.DS
+# Print the graph into file "file.ps"
+\&.graph postscript output file.ps -maxpect yes -decorations no
+.DE
+This generates a file \fCfile.ps\fR containing the encapsulated
+PostScript of the graph.  The option \fB\-maxpect\fR says to scale the
+graph to the size of the page.  Turning off the \fB\-decorations\fR
+option indicates that no borders or color backgrounds should be
+displayed (i.e. the background of the margins, legend, and plotting
+area will be white).
+.SH SYNTAX
+.DS C
+\fBgraph \fIpathName \fR?\fIoption value\fR?...
+.DE
+The \fBgraph\fR command creates a new window \fIpathName\fR and makes
+it into a \fBgraph\fR widget.  At the time this command is invoked, there
+must not exist a window named \fIpathName\fR, but \fIpathName\fR's
+parent must exist.  Additional options may may be specified on the
+command line or in the option database to configure aspects of the
+graph such as its colors and font.  See the \fBconfigure\fR operation
+below for the exact details as to what \fIoption\fR and \fIvalue\fR
+pairs are valid.
+.PP
+If successful, \fBgraph\fR returns \fIpathName\fR. It also creates a
+new Tcl command \fIpathName\fR.  This command may be used to invoke
+various operations to query or modify the \fBgraph\fR widget.  It has
+the general form:
+.DS C
+\fIpathName \fIoperation\fR \fR?\fIarg\fR?...
+.DE
+Both \fIoperation\fR and its arguments determine the exact behavior of
+the command.  The operations available for the \fBgraph\fR widget are
+described in the following section.
+.SH "OPERATIONS"
+.TP
+\fIpathName \fBcget\fR \fIoption\fR
+Returns the current value of the graph configuration option given by
+\fIoption\fR.  \fIOption\fR may be any one of the options described
+below for the \fBconfigure\fR operation.
+.TP
+\fIpathName \fBconfigure \fR?\fIoption value\fR?...
+Queries or modifies the configuration options of the graph.  If
+\fIoption\fR isn't specified, a list describing all of the current
+options for \fIpathName\fR is returned.  If \fIoption\fR is specified,
+but not \fIvalue\fR, then a list describing \fIoption\fR is returned.
+If one or more \fIoption\fR and \fIvalue\fR pairs are specified, then
+for each pair, the graph option \fIoption\fR is set to \fIvalue\fR.
+The following options are valid for the graph.
+.RS
+.TP
+\fB\-background \fIcolor\fR
+Sets the background color of the graph. This includes the margins and
+legend, but not the plotting area.
+.TP
+\fB\-borderwidth \fIpixels\fR
+Sets the width of the 3-D border around the outside of the graph.  The
+\fB\-relief\fR option determines if the border is to be drawn.  The
+default is \fC2\fR.
+.TP
+\fB\-bottommargin \fIpixels\fR
+Specifies the size of the margin below the x-coordinate axis.  If
+\fIpixels\fR is \fC0\fR, the size of the margin is selected automatically.
+The default is \fC0\fR.
+.TP
+\fB\-bufferelements \fIboolean\fR
+Indicates if to use an internal pixmap to buffer the display of data
+elements.  If \fIboolean\fR is true, data elements are drawn to an
+internal pixmap.  This option is especially useful when the graph is
+redrawn frequently while the remains data unchanged (for example,
+moving a marker across the plot).  See the
+.SB "SPEED TIPS"
+section.
+The default is \fC1\fR.
+.TP
+\fB\-cursor \fIcursor\fR
+Specifies the cursor to display in the graph window.  The default
+cursor is \fCcrosshair\fR.
+.TP
+\fB\-font \fIfontName\fR 
+Specifies the font of the graph title. The default is
+\fC*-Helvetica-Bold-R-Normal-*-18-180-*\fR.
+.TP
+\fB\-halo \fIpixels\fR 
+Specifies a maximum distance to consider when searching for the
+closest data point (see the element's \fBclosest\fR operation below).
+Data points outside of \fIpixels\fR are ignored.  The default is
+\fC0.5i\fR.
+.TP
+\fB\-height \fIpixels\fR
+Specifies the requested height of the graph window.  The default is
+\fC4i\fR.
+.TP
+\fB\-histmode \fIboolean\fR
+If \fIboolean\fR is true, bars are drawn from the minimum value
+of the y axis to the actual y value, otherwise they are drawn from
+the base line of the graph to the actual y value. The base line is
+either 0 (if \fC-logscale\fR is false) or 1 (because in this mode,
+all y values are log10-transformed, and log10(1) is 0). The default
+is \fC0\fR. Note that this option only applies to barchart elements
+(see the \fBelement bar\fR command in the
+.SB ELEMENTS
+section for details).
+.TP
+\fB\-invertxy \fIboolean\fR
+Indicates if the placement x and y axes should be inverted.  If
+\fIboolean\fR is true, the x and y axes are swapped.  The default is
+\fC0\fR.
+.TP
+\fB\-justify \fIjustify\fR
+Specifies how the title should be justified.  This matters only when
+the title contains more than one line of text. \fIJustify\fR must be
+\fCleft\fR, \fCright\fR, or \fCcenter\fR.  The default is
+\fCcenter\fR.
+.TP
+\fB\-leftmargin \fIpixels\fR
+Sets the size of the margin from the left edge of the window to the
+the y-coordinate axis.  If \fIpixels\fR is \fC0\fR, the size is
+calculated automatically.  The default is \fC0\fR.
+.TP
+\fB\-plotbackground \fIcolor\fR
+Specifies the background color of the plotting area.  The default is
+\fCwhite\fR.
+.TP
+\fB\-plotborderwidth \fIpixels\fR
+Sets the width of the 3-D border around the the plotting area.  The
+\fB\-plotrelief\fR option determines if a border is drawn.  The
+default is \fC2\fR.
+.TP
+\fB\-plotrelief \fIrelief\fR
+Specifies the 3-D effect for the plotting area.  \fIRelief\fR
+indicates how the interior of the plotting area should appear relative
+to rest of the graph; for example, \fCraised\fR means the plot should
+appear to protrude from the graph, relative to the surface of the
+graph.  The default is \fCsunken\fR.
+.TP
+\fB\-rightmargin \fIpixels\fR
+Sets the size of margin from the plotting area to the right edge of
+the window.  By default, the legend is displayed in this margin.  If
+\fIpixels\fR is than 1, the margin size is selected automatically.
+.TP
+\fB\-takefocus\fR \fIfocus\fR 
+Provides information used when moving the focus from window to window
+via keyboard traversal (e.g., Tab and Shift-Tab).  If \fIfocus\fR is
+\fC0\fR, this means that this window should be skipped entirely during
+keyboard traversal.  \fC1\fR means that the this window should always
+receive the input focus.  An empty value means that the traversal
+scripts make the decision about whether or not to focus on the window.
+The default is \fC""\fR.
+.TP
+\fB\-tile \fIimage\fR 
+Specifies a tiled background for the graph.  If \fIimage\fR isn't
+\fC""\fR, the background of the graph is tiled using \fIimage\fR.
+Otherwise, the normal background color is displayed (see the
+\fB\-background\fR option).  \fIImage\fR must be an image created
+using the Tk \fBimage\fR command.  The default is \fC""\fR.
+.TP
+\fB\-title \fItext\fR 
+Sets the title of the graph to \fItext\fR. If \fItext\fR is \fC""\fR,
+no title will be displayed.
+.TP
+\fB\-topmargin \fIpixels\fR
+Specifies the size of the margin above the x2 axis.  If \fIpixels\fR
+is \fC0\fR, the margin size is calculated automatically.
+.TP
+\fB\-width \fIpixels\fR
+Specifies the requested width of the graph window.  The default is
+\fC5i\fR.
+.RE
+.TP
+\fIpathName \fBcrosshairs \fIoperation \fR?\fIarg\fR?
+See the 
+.SB "CROSS HAIRS"
+section.
+.TP
+\fIpathName \fBelement \fIoperation \fR?\fIarg\fR?...
+See the 
+.SB ELEMENTS
+section.
+.TP
+\fIpathName \fBextents \fIitem\fR 
+Returns the size of a particular item in the graph.  \fIItem\fR must
+be either \fCleftmargin\fR, \fCrightmargin\fR, \fCtopmargin\fR,
+\fCbottommargin\fR, \fCplotwidth\fR, or \fCplotheight\fR.
+.TP
+\fIpathName \fBgrid \fIoperation \fR?\fIarg\fR?...
+See the 
+.SB "GRID LINES"
+section.
+.TP
+\fIpathName \fBinvtransform \fIwinX winY\fR 
+Performs a inverse coordinate transformation, mapping window
+coordinates back to graph coordinates, using the standard x and y axes.
+Returns a list of containing the x and y graph coordinates.
+.TP
+\fIpathName \fBlegend \fIoperation \fR?\fIarg\fR?...
+See the 
+.SB LEGEND
+section.
+.TP
+\fIpathName \fBmarker \fIoperation \fR?\fIarg\fR?...
+See the 
+.SB "MARKERS"
+section.
+.TP
+\fIpathName \fBpostscript \fIoperation \fR?\fIarg\fR?...
+See the 
+.SB POSTSCRIPT
+section.
+.TP
+\fIpathName \fBtransform \fIx y\fR 
+Performs a coordinate transformation, mapping graph coordinates to
+window coordinates, using the standard x and y axes.
+Returns a list containing the x and y window coordinates.
+.TP
+\fIpathName \fBxaxis \fIoperation\fR ?\fIarg\fR?...
+.TP
+\fIpathName \fBx2axis \fIoperation\fR ?\fIarg\fR?... 
+.TP
+\fIpathName \fByaxis \fIoperation\fR ?\fIarg\fR?... 
+.TP
+\fIpathName \fBy2axis \fIoperation\fR ?\fIarg\fR?... 
+See the 
+.SB AXES
+section.
+.SH "AXES"
+The graph has four coordinate axes: two x-coordinate axes (\fCx\fR and
+\fCx2\fR) and two y-coordinate axes (\fCy\fR, and \fCy2\fR).  The
+\fCx\fR-axis is located in the bottom margin, the \fCy\fR-axis in the
+left margin, the \fCx2\fR-axis in the top margin, and the
+\fCy2\fR-axis in the right margin.
+.PP
+An axis consists of the axis line, title, major and minor ticks, and
+tick labels.  Major ticks are drawn at uniform intervals along the
+axis.  Each tick is labeled with its coordinate value.  Minor ticks
+are drawn at uniform intervals within major ticks.  
+.PP
+The range of the axis controls what region of data is plotted.
+Data points outside of the minimum and maximum limits of the axis are
+not plotted.  By default, the minimum and maximum limits are
+determined from the data, but you can reset either limit.
+.PP
+When data elements and markers are plotted, they are
+mapped onto one of the x and y axes. By default, they are mapped 
+onto the standard axes \fCx\fR and \fCy\fR.  Both elements and
+markers have \fB\-mapx\fR and \fB\-mapy\fR options to change this.
+.PP
+You can configure axes in many ways. The axis scale can be linear or
+logarithmic.  The values along the axis can either monotonically
+increase or decrease.  If you need custom tick labels, you can specify
+a Tcl procedure to format the label any way you wish.  You can
+control how ticks are displayed, by changing the major tick interval
+or the number of minor ticks.  You can define non-uniform tick intervals,
+such as for time-series plots.
+.PP
+The following operations are available for axes. The \fIaxis\fR argument
+must be \fBxaxis\fR, \fBx2axis\fR, \fByaxis\fR, or \fBy2axis\fR.
+.TP
+\fIpathName \fIaxis \fBcget \fIoption\fR
+Returns the current value of the option given by \fIoption\fR for
+\fIaxis\fR.  \fIOption\fR may be any one of the options described below
+for the axis \fBconfigure\fR operation.
+.TP
+\fIpathName \fIaxis \fBconfigure \fR?\fIoption value\fR?...
+Queries or modifies the configuration options of \fIaxis\fR.  If
+\fIoption\fR isn't specified, a list describing all of the current
+options for \fIaxis\fR is returned.  If \fIoption\fR is specified, but
+not \fIvalue\fR, then a list describing \fIoption\fR is
+returned.  If one or more \fIoption\fR and \fIvalue\fR pairs are
+specified, then for each pair, the axis option \fIoption\fR is set to
+\fIvalue\fR.  
+The following options are valid for axes.
+.RS
+.TP
+\fB\-color \fIcolor\fR
+Sets the color of the axis and tick labels.
+The default is \fCblack\fR.
+.TP
+\fB\-command \fIprefix\fR
+Specifies a Tcl command to be invoked when formatting the axis tick
+labels. \fIPrefix\fR is a string containing the name of a Tcl proc and
+any extra arguments for the procedure.  This command is invoked for each
+major tick on the axis.  Two additional arguments are passed to the
+procedure: the pathname of the graph widget and the current the numeric
+value of the tick.  The procedure returns the formatted tick label.  If
+\fC""\fR is returned, no label will appear next to the tick.  You can
+get the standard tick labels again by setting \fIprefix\fR to
+\fC""\fR.  The default is \fC""\fR.
+.sp 1
+Please note that this procedure is invoked during the actual display
+of the graph.  You may query the graph options.  But do not reset
+configuration options, because this can have unexpected results.
+.TP
+\fB\-descending \fIboolean\fR 
+Indicates if the values along the axis are monotonically increasing or
+decreasing.  If \fIboolean\fR is true, the axis values will be
+decreasing.  The default is \fC0\fR.
+.TP
+\fB\-justify \fIjustify\fR
+Specifies how the axis title should be justified.  This matters only
+when the axis title contains more than one line of text. \fIJustify\fR must
+be \fCleft\fR, \fCright\fR, or \fCcenter\fR.  The
+default is \fCcenter\fR.
+.TP
+\fB\-linewidth \fIpixels\fR
+Sets the width of the axis and tick lines.  The default
+is \fC1\fR pixel.
+.TP
+\fB\-logscale \fIboolean\fR
+Indicates if the scale of the axis is logarithmic or
+linear.  If \fIboolean\fR is true, the axis is logarithmic.  
+The default scale is linear.
+.TP
+\fB\-loose \fIboolean\fR
+Indicates if the limits of the axis should fit the data points tightly,
+at the outermost data points, or loosely, at the outer tick intervals.
+This is relevant only when the axis limit is automatically calculated.
+If \fIboolean\fR is true, the axis range is "loose".
+The default is \fC0\fR.
+.TP
+\fB\-majorticks \fImajorList\fR
+Specifies where to display major axis ticks.  You can use this option
+to display ticks at non-uniform intervals.  \fIMajorList\fR is a list
+of axis coordinates indicating the location of major ticks.  In this
+case, no minor ticks are displayed.  If \fImajorList\fR is \fC""\fR, 
+major ticks will be automatically computed. The default is \fC""\fR.
+.TP
+\fB\-mapped \fIboolean\fR
+Indicates if the axis should be displayed. By default, the standard
+axes are displayed (x and y), but not the alternate (x2 and y2).
+.TP
+\fB\-max \fIvalue\fR
+Sets the maximum limit of \fIaxis\fR.  Any data point greater 
+than \fIvalue\fR is not displayed.  If \fIvalue\fR is \fC""\fR, 
+the maximum limit is calculated using the largest data value.
+The default is \fC""\fR.
+.TP
+\fB\-min \fIvalue\fR
+Sets the minimum limit of \fIaxis\fR. Any data point less than 
+\fIvalue\fR is not displayed.  If \fIvalue\fR is \fC""\fR,
+the minimum limit is calculated using the smallest data value.
+The default is \fC""\fR.
+.TP
+\fB\-minorticks \fIminorList\fR
+Specifies where to display minor axis ticks.  You can use this option
+to display minor ticks at non-uniform intervals. \fIMinorList\fR is a
+list of real values, ranging from 0.0 to 1.0, indicating the placement of
+a minor tick.  No minor ticks are displayed if the \fB\-majortick\fR
+option is also set.  If \fIminorList\fR is \fC""\fR, minor ticks will
+be automatically computed. The default is \fC""\fR.
+.TP
+\fB\-rotate \fItheta\fR
+Specifies the how many degrees to rotate the axis tick labels.
+\fITheta\fR is a real value representing the number of degrees
+to rotate the tick labels.  The default is \fC0.0\fR degrees.
+.TP
+\fB\-showticks \fIboolean\fR
+Indicates if axis ticks should be displayed. If \fIboolean\fR is
+true, ticks are displayed.  If false, only the
+axis line is displayed. The default is \fC1\fR.
+.TP
+\fB\-stepsize \fIvalue\fR
+Specifies the interval between major axis ticks.  If \fIvalue\fR isn't
+a valid interval (must be less than the axis range), 
+the request is ignored and the step size is automatically calculated.
+.TP
+\fB\-subdivisions \fInumber\fR 
+Indicates how many minor axis ticks are
+to be displayed.  For example, if \fInumber\fR is two, only one minor
+tick is displayed.  If \fInumber\fR is one, no minor ticks are
+displayed.  The default is \fC2\fR.
+.TP
+\fB\-tickfont \fIfontName\fR 
+Specifies the font for axis tick labels. The default is
+\fC*-Courier-Bold-R-Normal-*-100-*\fR.
+.TP
+\fB\-ticklength \fIpixels\fR
+Sets the length of major and minor ticks (minor ticks are half the
+length of major ticks). If \fIpixels\fR is less than zero, the axis
+will be inverted with ticks drawn pointing towards the plot.  The
+default is \fC0.1i\fR.
+.TP
+\fB\-title \fItext\fR
+Sets the title of the axis. If \fItext\fR is 
+\fC""\fR, no axis title will be displayed.  
+.TP
+\fB\-titlefont \fIfontName\fR 
+Specifies the font for axis title. The default is
+\fC*-Helvetica-Bold-R-Normal-*-14-140-*\fR.
+.PP
+Axis configuration options may be also be set by the \fBoption\fR
+command.  The resource names in the option database are prefixed by
+\fCx\fR, \fCy\fR, \fCx2\fR, or \fCy2\fR while class names are
+prefixed by \fCAxis\fR.
+.DE
+option add *Graph.AxisColor blue
+option add *Graph.xLogScale true
+option add *Graph.x2LogScale false
+.DE
+.RE
+.TP
+\fIpathName \fIaxis\fB invtransform \fIvalue\fR
+Performs the inverse transformation, changing the screen coordinate 
+\fIvalue\fR to a graph coordinate. The value is mapped to \fIaxis\fR.  
+Returns the graph coordinate.
+.TP
+\fIpathName \fIaxis \fBlimits\fR
+Returns a list of the minimum and maximum limits for \fIaxis\fR.  The order
+of the list is \fCmin max\fR.
+.TP
+\fIpathName \fIaxis\fB transform \fIvalue\fR
+Transforms the coordinate \fIvalue\fR to a screen coordinate by mapping
+the it to \fIaxis\fR.  Returns the transformed screen coordinate.
+.SH "CROSS HAIRS"
+Cross hairs consist of two intersecting lines (one vertical and one horizontal)
+drawn completely across the plotting area.  They are used to finely control
+movement of the pointer in the graph.  Cross hairs differ from line
+markers in that they are implemented using XOR drawing primitives.
+This means that they can be quickly drawn and erased without redrawing
+the entire graph.
+.PP
+The following operations are available for cross hairs:
+.TP
+\fIpathName \fBcrosshairs cget \fIoption\fR
+Returns the current value of the cross hairs configuration option
+given by \fIoption\fR.  \fIOption\fR may be any one of the options
+described below for the cross hairs \fBconfigure\fR operation.
+.TP
+\fIpathName \fBcrosshairs configure \fR?\fIoption value\fR?...  
+Queries or modifies the configuration options of the cross hairs.  If
+\fIoption\fR isn't specified, a list describing all of the current
+options for the cross hairs is returned.  If \fIoption\fR is specified,
+but not \fIvalue\fR, then a list describing \fIoption\fR is returned.
+If one or more \fIoption\fR and \fIvalue\fR pairs are specified, then
+for each pair, the cross hairs option \fIoption\fR is set to
+\fIvalue\fR.
+The following options are available for cross hairs.
+.RS
+.TP
+\fB\-color \fIcolor\fR 
+Sets the color of the cross hairs.  The default is \fCblack\fR.
+.TP
+\fB\-dashes \fIdashList\fR
+Sets the dash style of the cross hairs. \fIDashList\fR is a list of up
+to 11 numbers which alternately represent the lengths of the dashes
+and gaps on the cross hair lines.  Each number must be between 1 and
+255.  If \fIdashList\fR is \fC""\fR, the cross hairs will be solid
+lines.
+.TP
+\fB\-linewidth \fIpixels\fR
+Set the width of the cross hair lines.  The default is \fC1\fR.
+.TP
+\fB\-mapped \fIboolean\fR
+Indicates if cross hairs are drawn. If \fIboolean\fR is true,
+cross hairs are displayed.  The default is \fC0\fR.
+.TP
+\fB\-position \fIpos\fR 
+Specifies the screen position where the cross hairs intersect.
+\fIPos\fR must be in the form "\fI@x,y\fR", where \fIx\fR and \fIy\fR
+are the window coordinates of the intersection.
+.PP
+Cross hairs configuration options may be also be set by the
+\fBoption\fR command.  The resource names in the option database are
+prefixed by \fCxhairs\fR, while class names are prefixed by \fCXhairs\fR. 
+.DS
+option add *Graph.xhairsLineWidth 2
+option add *Graph.XhairsColor red
+.DE
+.RE
+.TP
+\fIpathName \fBcrosshairs off\fR
+Turns of the cross hairs. 
+.TP
+\fIpathName \fBcrosshairs on\fR
+Turns on the display of the cross hairs on the graph.
+.TP
+\fIpathName \fBcrosshairs toggle\fR
+Toggles the current state of the cross hairs, alternately mapping
+and unmapping the cross hairs.
+.SH "ELEMENTS"
+A data element represents a set of data.  It contains x and y
+vectors which are the coordinates of the data points.  Elements can be
+displayed with a symbol at each data point and lines connecting
+the points.  Elements also control the appearance of the data, such
+as the symbol type, line width, color etc.
+.PP
+When new data elements are created, they are automatically added to a
+list of displayed elements.   The display list controls what elements
+are displayed and in what order.  
+.PP
+The following operations are available for elements.
+.TP
+\fIpathName \fBelement activate \fIelemName \fR?\fIindex\fR?...
+Specifies which data points of element \fIelemName\fR are to be drawn 
+using active foreground and background colors.  \fIElemName\fR is the name
+of the element and \fIindex\fR is a number representing the index of 
+the data point. If no indices are present then all data points become 
+active.  
+.TP
+\fIpathName \fBelement bar \fIelemName \fR?\fIoption value\fR?...
+Creates a new barchart element \fIelemName\fR in the graph.  Element
+names must be unique, so an element \fIelemName\fR may not already
+exist.  See the manual for \fBbarchart\fR for details as to
+what \fIoption\fR and \fIvalue\fR pairs are valid.
+.TP
+\fIpathName \fBelement cget \fIelemName \fIoption\fR
+Returns the current value of the element configuration option given by 
+\fIoption\fR.  \fIOption\fR may be any of the options described below
+for the element \fBconfigure\fR operation.
+.TP
+\fIpathName \fBelement closest \fIvarName x y\fR ?\fIoption value\fR?... ?\fIelemName\fR?...
+Finds the data point closest to the window coordinates \fIx\fR and
+\fIy\fR in the element \fIelemName\fR.  \fIElemName\fR is the name of
+an element, which must be mapped.  If no elements are specified, then
+all mapped elements are searched.  If a data point within the threshold
+distance can be found, \fC1\fR is returned, and \fIvarName\fR will be
+created as an array containing the five elements \fCname\fR (name of the
+closest element), \fCindex\fR (the index of its closest point),
+\fCdist\fR (the distance between \fIx\fR,\fIy\fR and the closest point),
+\fCx\fR, and \fCy\fR (the x and y coordinates of the closest point).
+If no data point within the threshold distance can be found, \fC0\fR is
+returned and \fIvarName\fR is created as an array with the single element
+\fCname\fR, which is set to an empty string.  The following
+\fIoption\fR\-\fIvalue\fR pairs are available.
+.RS
+.TP
+\fB\-halo \fIpixels\fR
+Specifies a threshold distance beyond which data points are ignored.
+\fIPixels\fR is a valid screen distance, such as \fC2\fR or \fC1.2i\fR.
+If this option isn't specified, then it defaults to the value of the
+graph's \fB\-halo\fR option.
+.TP
+\fB\-interpolate \fIboolean\fR
+Indicates that both the data points and interpolated points along
+the line segment formed should be considered.  If \fIboolean\fR 
+is true, the closest line segment will be selected instead of the
+closest point. If this option isn't specified, \fIboolean\fR defaults 
+to \fC0\fR.
+.RE
+.TP
+\fIpathName \fBelement configure \fIelemName \fR?\fIoption value\fR?...
+Queries or modifies the configuration options for elements.  If
+\fIoption\fR isn't specified, a list describing all of the current
+options for \fIelemName\fR is returned.  If \fIoption\fR is specified,
+but not \fIvalue\fR, then a list describing the option \fIoption\fR is
+returned.  If one or more \fIoption\fR and \fIvalue\fR pairs are
+specified, then for each pair, the element option \fIoption\fR is set
+to \fIvalue\fR.  The following options are valid for elements.
+.RS
+.TP
+\fB\-activefill \fIcolor\fR
+Like the \fB\-fill\fR option, but sets the 
+interior color of symbols when drawing active data points
+(see the \fBactivate\fR operation). If \fIcolor\fR is \fC\""\fR, then
+symbol will be transparent. If \fIcolor\fR is \fCdefcolor\fR, then the color
+will be the same as the \fB\-activecolor\fR option.
+The default is \fCdefcolor\fR.
+.TP
+\fB\-activecolor \fIcolor\fR 
+Like the \fB\-color\fR option, but sets the active color of the 
+traces connecting each data point.  All data points must be active.
+.TP
+\fB\-activeoutline \fIcolor\fR 
+Like the \fB\-outline\fR option, but sets the 
+color of the outline around symbols when drawing active data points
+(see the \fBactivate\fR operation). If \fIcolor\fR is \fC\""\fR, then
+no outline is drawn. If \fIcolor\fR is \fCdefcolor\fR, then the color
+will be the same as the \fB\-activecolor\fR option.
+The default is \fCdefcolor\fR.
+.TP
+\fB\-activelinewidth \fIpixels\fR
+Sets the width of the traces drawn connecting data points when the
+element is active.  If \fIpixels\fR is \fC0\fR and the symbol is not
+\fCnone\fR, no line will be drawn when the element is active.  The
+default line width is \fC1\fR.
+.TP
+\fB\-dashes \fIdashList\fR
+Sets the dash style of element line. \fIDashList\fR is a list of up to
+11 numbers which alternately represent the lengths of the dashes and
+gaps on the element line.  Each number must be between 1 and 255.  If
+\fIdashList\fR is \fC""\fR, the lines will be solid.
+.TP
+\fB\-data \fIcoordList\fR
+Specifies the x,y coordinates of the the data.
+\fICoordList\fR is a list of numeric expressions representing
+the x and y coordinate pairs of each data point.  
+.TP
+\fB\-fill \fIcolor\fR 
+Sets the interior color of symbols.  If \fIcolor\fR is \fC\""\fR, then
+the interior of the symbol is transparent.  If \fIcolor\fR is
+\fCdefcolor\fR, then the color will be the same as the
+\fB\-color\fR option.  The default is \fCdefcolor\fR.
+.TP
+\fB\-color \fIcolor\fR 
+Sets the color of the traces connecting the data points.  
+.TP
+\fB\-label \fItext\fR
+Sets the label for the element displayed in the legend.  
+If \fItext\fR is \fC""\fR, no entry for the element will be 
+displayed in the legend.  The default label is the element's name.
+.TP
+\fB\-linewidth \fIpixels\fR 
+Sets the width of the connecting lines
+between data points.  If \fIpixels\fR is \fC0\fR, no connecting lines
+will be drawn between symbols.  The default is \fC0\fR.
+.TP
+\fB\-mapped \fIboolean\fR
+Indicates if the element is displayed.  The default is \fC1\fR.
+.TP
+\fB\-mapx \fIxAxis\fR
+Selects the x-axis to map the element's x-coordinates onto.
+\fIXAxis\fR must be either \fCx\fR, \fCx2\fR, or \fCboth\fR.  The default
+is \fCx\fR.
+.TP
+\fB\-mapy \fIyAxis\fR
+Selects the y-axis to map the element's y-coordinates onto.
+\fIYAxis\fR must be either \fCy\fR, \fCy2\fR, or \fCboth\fR.  The default
+is \fCy\fR.
+.TP
+\fB\-offdash \fIcolor\fR
+Sets the color of the stripes when traces are dashed (see the
+\fB\-dashes\fR option).  If \fIcolor\fR is \fC""\fR, then the "off"
+pixels will represent gaps instead of stripes.  If \fIcolor\fR
+is \fCdefcolor\fR, then the color will be the same as the
+\fB\-color\fR option.  The default is \fCdefcolor\fR.
+.TP
+\fB\-outline \fIcolor\fR 
+Sets the color or the outline around each symbol.  If \fIcolor\fR is
+\fC""\fR, then no outline is drawn. If \fIcolor\fR is \fCdefcolor\fR,
+then the color will be the same as the \fB\-color\fR option.  The
+default is \fCdefcolor\fR.
+.TP
+\fB\-outlinewidth \fIpixels\fR 
+Sets the width of the outline bordering each symbol.  If \fIpixels\fR
+is \fC0\fR, no outline will be drawn. The default is \fC1\fR.
+.TP
+\fB\-pixels \fIpixels\fR
+Sets the size of symbols.  If \fIpixels\fR is \fC0\fR, no symbols will
+be drawn.  The default is \fC0.125i\fR.
+.TP
+\fB\-scalesymbols \fIboolean\fR 
+If \fIboolean\fR is true, this indicates that the size of symbols
+drawn for \fIelemName\fR should change with scale of the x and y axes.
+At the time this option is set, the current ranges of the axes are
+saved as the normalized scales (i.e scale factor is 1.0) and the
+element is displayed at its designated size (see the \fB\-pixels\fR
+option).  As the scale of the axes change, the symbol will be scaled
+according to the smaller of the x and y axis scales.  If \fIboolean\fR
+is false, the element's symbols are drawn at the designated size,
+regardless of axis scales.  The default is \fC0\fR.
+.TP
+\fB\-symbol \fIsymbol\fR 
+Specifies the symbol to use for plotting data
+points.  \fISymbol\fR must be \fCsquare\fR, \fCcircle\fR, \fCdiamond\fR,
+\fCplus\fR, \fCcross\fR, \fCsplus\fR, \fCscross\fR, \fCtriangle\fR 
+or \fCnone\fR (where no symbol is drawn).  The default is \fCnone\fR.
+.TP
+\fB\-trace \fIdirection\fR 
+Indicates if to draw connecting lines between data points whose
+x-coordinate values are increasing or decreasing.  \fIDirection\fR
+must be \fCincreasing\fR, \fCdecreasing\fR, or \fCboth\fR.  For
+example, if \fIdirection\fR is \fCincreasing\fR, connecting lines will
+be drawn only between those data points where x-coordinate values are
+monotonically increasing.  If \fIdirection\fR is \fCboth\fR,
+connecting lines will be draw between all data points.  The default is
+\fCboth\fR.
+.TP
+\fB\-xdata \fIxVector\fR 
+Specifies the x-coordinate vector of the data.
+\fIXVector\fR is the name of a BLT vector or a
+list of numeric expressions.  
+.TP
+\fB\-ydata \fIyVector\fR 
+Specifies the y-coordinate vector of the data.
+\fIYVector\fR is the name of a BLT vector or a list of
+numeric expressions.  
+.PP
+Element configuration options may also be set by the 
+\fBoption\fR command.  The resource names  in the option database 
+are prefixed by \fCelem\fR.
+.DS
+option add *Graph.elemSymbol line
+.DE
+.RE
+.TP
+\fIpathName \fBelement create \fIelemName\fR ?\fIoption value\fR?...
+Creates a new element \fIelemName\fR in the graph.  Element
+names must be unique, so an element \fIelemName\fR may not already
+exist.  If additional arguments are present, they specify any of the
+element options valid for element \fBconfigure\fR operation.
+.TP
+\fIpathName \fBelement deactivate \fIelemName\fR ?\fIelemName\fR?...
+Deactivates all the elements matching \fIpattern\fR for the graph.  
+Elements whose names match any of the patterns given are redrawn 
+using their normal colors.  
+.TP
+\fIpathName \fBelement delete\fR ?\fIpattern\fR?...
+Deletes all the elements matching \fIpattern\fR for the graph.  
+Elements whose names match any of the patterns given are deleted. 
+The graph will be redrawn without the deleted elements.  
+.TP
+\fIpathName \fBelement exists \fIelemName\fR
+Returns \fC1\fR if an element \fIelemName\fR currently exists in the
+graph and \fC0\fR otherwise.
+.TP
+\fIpathName \fBelement line \fIelemName\fR ?\fIoption value\fR?...
+The operation is the same as \fBcreate\fR.
+.TP
+\fIpathName \fBelement names\fR 
+Returns a list of all the elements in the graph. 
+.TP
+\fIpathName \fBelement show\fR ?\fInameList\fR?  
+Queries or modifies the element display list.  The element display
+list designates which elements are drawn and in what
+order. \fINameList\fR is a list of elements to be displayed in the
+order which they are named.  If there is no \fInameList\fR argument,
+the current display list is returned.
+.TP
+\fIpathName \fBelement type\fR  \fIelemName\fR
+Indicates if the element \fIelemName\fR is a graph or barchart element.
+If the element is a bar element, the commands returns the string
+\fC"bar"\fR, otherwise it returns \fC"line"\fR.
+.DE
+.SH "GRID LINES"
+Grid lines extend from the major and minor ticks of each axis
+horizontally or vertically across the plotting area.  
+The following operations are available for grid lines.
+.TP
+\fIpathName \fBgrid cget \fIoption\fR
+Returns the current value of the grid line configuration option given by 
+\fIoption\fR.  \fIOption\fR may be any one of the options described below
+for the grid \fBconfigure\fR operation.
+.TP
+\fIpathName \fBgrid configure\fR ?\fIoption value\fR?...
+Queries or modifies the configuration options for grid lines.  If
+\fIoption\fR isn't specified, a list describing all of the current
+grid options for \fIpathName\fR is returned.  If \fIoption\fR is specified,
+but not \fIvalue\fR, then a list describing \fIoption\fR is
+returned.  If one or more \fIoption\fR and \fIvalue\fR pairs are
+specified, then for each pair, the grid line option \fIoption\fR is set to
+\fIvalue\fR.  The following options are valid for grid lines.
+.RS
+.TP
+\fB\-color \fIcolor\fR 
+Sets the color of the grid lines.  The default is \fCblack\fR.
+.TP
+\fB\-dashes \fIdashList\fR
+Sets the dash style of the grid lines. \fIDashList\fR is a list of up
+to 11 numbers which alternately represent the lengths of the dashes
+and gaps on the grid lines.  Each number must be between 1 and 255.
+If \fIdashList\fR is \fC""\fR, the grid will be solid lines.
+.TP
+\fB\-linewidth \fIpixels\fR
+Sets the width of grid lines.  The default width is \fC1\fR.
+.TP
+\fB\-mapped \fIboolean\fR
+Indicates if the grid should be displayed. If \fIboolean\fR
+is true, the grid is shown. The default is \fC0\fR.
+.TP
+\fB\-mapx \fIxAxis\fR
+Specifies for which x-axis grid lines will be displayed.
+\fIXAxis\fR must be either \fCx\fR, \fCx2\fR, or \fCboth\fR.  The 
+default is \fCx\fR.
+.TP
+\fB\-mapy \fIyAxis\fR
+Specifies for which y-axis grid lines will be displayed.
+\fIYAxis\fR must be either \fCy\fR, \fCy2\fR, or \fCboth\fR.  
+The default is \fCy\fR.
+.TP
+\fB\-minor \fIboolean\fR
+Indicates if the grid lines should be displayed for minor ticks. 
+If \fIboolean\fR is true, the lines will appear at
+minor tick intervals.  The default is \fC1\fR.
+.PP
+Grid configuration options may also be set by the 
+\fBoption\fR command.  The resource names in the option database
+are prefixed by by \fCgrid\fR, while class names are prefixed by \fCGrid\fR. 
+.DS
+\fCoption add *Graph.gridLineWidth 2\fR
+\fCoption add *Graph.GridColor black\fR
+.DE
+.RE
+.TP
+\fIpathName \fBgrid off\fR
+Turns off the display the grid lines.
+.TP
+\fIpathName \fBgrid on\fR
+Turns on the display the grid lines.
+.TP
+\fIpathName \fBgrid toggle\fR
+Toggles the display of the grid.  
+.SH LEGEND
+The legend displays a list of the data elements.  Each entry consists
+of the element's symbol and label.  The legend can appear in any
+margin of the graph (the default location is in the right margin).  It can
+also be positioned anywhere within the plotting area of the graph.
+.PP
+The following operations are valid for the legend.
+.TP
+\fIpathName \fBlegend activate \fIpattern\fR...
+Selects legend entries to be drawn using the active legend colors and relief.
+All entries whose element names match \fIpattern\fR  are selected.  To
+be selected, the element name must match only one \fIpattern\fR. 
+.TP
+\fIpathName \fBlegend cget \fIoption\fR
+Returns the current value of a legend configuration option.  
+\fIOption\fR may be any one of the options described below in the 
+legend \fBconfigure\fR operation.
+.TP
+\fIpathName \fBlegend configure \fR?\fIoption value\fR?...
+Queries or modifies the configuration options for the legend.  If
+\fIoption\fR isn't specified, a list describing all of the current
+legend options for \fIpathName\fR is returned.  If \fIoption\fR is specified,
+but not \fIvalue\fR, then a list describing \fIoption\fR is
+returned.  If one or more \fIoption\fR and \fIvalue\fR pairs are
+specified, then for each pair, the legend option \fIoption\fR is set to
+\fIvalue\fR.  The following options are valid for the legend.
+.RS
+.TP
+\fB\-activebackground \fIcolor\fR
+Sets the background color for active legend entries.  All legend entries
+marked active (see the legend \fBactivate\fR operation) are drawn using
+this background color.
+.TP
+\fB\-activeborderwidth \fIpixels\fR
+Sets the width of the 3-D border around the outside of active legend entries.
+The default is \fC2\fR.
+.TP
+\fB\-activeforeground \fIcolor\fR
+Sets the foreground color for active legend entries.  All legend entries
+marked as active (see the legend \fBactivate\fR operation) are drawn using
+this foreground color.
+.TP
+\fB\-activerelief \fIrelief\fR
+Specifies the 3-D effect desired for active legend entries.
+\fIRelief\fR indicates how the interior of the entry should appear
+relative to the legend; for example, \fCraised\fR means the entry
+should appear to protrude from the legend, relative to the surface of
+the legend.  The default is \fCflat\fR.
+.TP
+\fB\-anchor \fIanchor\fR
+Tells how to position the legend relative to the positioning point for
+the legend.  This is dependent upon the value of the \fB\-position\fR 
+option.  The default is \fCcenter\fR.
+.RS
+.TP 1.25i
+\fCleft\fR or \fCright\fR
+The anchor describes how to position the legend vertically.  
+.TP
+\fCtop\fR or \fCbottom\fR
+The anchor describes how to position the legend horizontally.  
+.TP
+\fC@x,y\fR
+The anchor indicates how to position the legend relative to the 
+positioning point. For example, if \fIanchor\fR is \fCcenter\fR
+then the legend is centered on the point; if \fIanchor\fR is
+\fCn\fR then the legend will be drawn such that the top center point
+of the rectangular region occupied by the legend will be at the
+positioning point.  
+.TP
+\fCplotarea\fR
+The anchor indicates how to position the legend relative to the 
+plotting area. For example, if \fIanchor\fR is \fCcenter\fR
+then the legend is centered in the plotting area; if \fIanchor\fR is
+\fCne\fR then the legend will be drawn such that occupies the
+upper right corner of the plotting area.
+.RE
+.TP
+\fB\-background \fIcolor\fR
+Sets the background color of the legend. If \fIcolor\fR is \fC""\fR, the
+legend background with be transparent.
+.TP
+\fB\-borderwidth \fIpixels\fR
+Sets the width of the 3-D border around the outside of
+the legend (if such border is being drawn; the \fBrelief\fR option
+determines this).  The default is \fC2\fR pixels.
+.TP
+\fB\-font \fIfontName\fR 
+\fIFontName\fR specifies a font to use when drawing the labels of each
+element into the legend.  The default is 
+\fC*-Helvetica-Bold-R-Normal-*-12-120-*\fR.
+.TP
+\fB\-foreground \fIcolor\fR 
+Sets the foreground color of the text drawn for the element's label.
+The default is \fCblack\fR.
+.TP
+\fB\-ipadx \fIpad\fR 
+Sets the amount of internal padding to be added to the width of each
+legend entry.  \fIPad\fR can be a list of one or two numbers.  If
+\fIpad\fR has two elements, the left side of the legend entry is
+padded by the first value and the right side by the second value.  If
+\fIpad\fR is just one value, both the left and right sides are padded by
+evenly by the value.  The default is \fC2\fR.
+.TP
+\fB\-ipady \fIpad\fR
+Sets an amount of internal padding to be added to the height of each
+legend entry.  \fIPad\fR can be a list of one or two numbers.  If
+\fIpad\fR has two elements, the top of the entry is padded by the first
+value and the bottom by the second value.  If \fIpad\fR is just one number, 
+both the top and bottom of the entry are padded evenly by the value.  
+The default is \fC2\fR.
+.TP
+\fB\-mapped \fIboolean\fR
+Indicates if the legend should be displayed. If \fIboolean\fR is
+true, the legend will be mapped.  The default is \fC1\fR.
+.TP
+\fB\-padx \fIpad\fR
+Sets the padding to the left and right exteriors of the legend.
+\fIPad\fR can be a list of one or two numbers.  If \fIpad\fR has two
+elements, the left side of the legend is padded by the first value and
+the right side by the second value.  If \fIpad\fR has just one value,
+both the left and right sides are padded evenly by the value.  The
+default is \fC4\fR.
+.TP
+\fB\-pady \fIpad\fR
+Sets the padding above and below the legend.  \fIPad\fR can be a list
+of one or two numbers.  If \fIpad\fR has two elements, the area above
+the legend is padded by the first value and the area below by the
+second value.  If \fIpad\fR is just one number, both the top and
+bottom areas are padded by the value.  The default is \fC0\fR.
+.TP
+\fB\-position \fIpos\fR
+Specifies where the legend is displayed on the graph. The
+\fB\-anchor\fR option also affects where the legend is positioned.
+If \fIpos\fR is \fCleft\fR, \fCleft\fR, \fCtop\fR, or \fCbottom\fR,
+the legend is displayed in the specified margin.  If \fIpos\fR is
+\fCplotarea\fR, then the legend is drawn inside the plotting area at a
+particular anchor.  If \fIpos\fR is in the form "\fI@x,y\fR", where
+\fIx\fR and \fIy\fR are the window coordinates, the legend is drawn in
+the plotting area at the specified coordinates.  The default is
+\fCright\fR.
+.TP
+\fB\-relief \fIrelief\fR
+Specifies the 3-D effect for the border around the legend.  \fIRelief\fR
+indicates how the interior of the legend should appear relative to the
+graph; for example, \fCraised\fR means the legend should appear to
+protrude from the graph, relative to the surface of the graph.  The
+default is \fCsunken\fR.
+.PP
+Legend configuration options may also be set by the \fBoption\fR
+command.  The resource names in the option database are prefixed by
+\fClegend\fR, while class names are prefixed with \fCLegend\fR.
+.DS
+\fCoption add *Graph.legendForeground blue\fR
+\fCoption add *Graph.LegendRelief raised\fR
+.DE
+.RE
+.TP
+\fIpathName \fBlegend deactivate \fIpattern\fR...
+Selects legend entries to be drawn using the
+normal legend colors and relief.  All entries whose element names match 
+\fIpattern\fR  are selected.  To be selected, the element name must 
+match only one \fIpattern\fR. 
+.TP
+\fIpathName \fBlegend get \fIpos\fR
+Returns the name of the element whose entry is at the screen position
+\fIpos\fR in the legend.  \fIPos\fR must be in the form "\fI@x,y\fR", where 
+\fIx\fR and \fIy\fR are window coordinates.  If the given coordinates 
+do not lie over a legend entry, \fC""\fR is returned.
+.SH "POSTSCRIPT"
+The \fBgraph\fR can generate encapsulated PostScript output.
+There are several configuration options you can specify to
+control how the graph will be printed.  You can change the page
+dimensions and borders.  The graph itself can be scaled, centered, or
+rotated to landscape.  The PostScript output can be written directly
+to a file or returned.
+.PP
+The following postscript operations are available.
+.TP
+\fIpathName \fBpostscript cget \fIoption\fR
+Returns the current value of the postscript option given by
+\fIoption\fR.  \fIOption\fR may be any one of the options described
+below for the postscript \fBconfigure\fR operation.
+.TP
+\fIpathName \fBpostscript configure \fR?\fIoption value\fR?...
+Queries or modifies the configuration options for PostScript
+generation.  If \fIoption\fR isn't specified, a list describing all of
+the current postscript options for \fIpathName\fR is returned.  If
+\fIoption\fR is specified, but not \fIvalue\fR, then a list describing
+\fIoption\fR is returned.  If one or more \fIoption\fR and
+\fIvalue\fR pairs are specified, then for each pair, the postscript option
+\fIoption\fR is set to \fIvalue\fR.  The following postscript options
+are available.
+.RS
+.TP
+\fB\-center \fIboolean\fR
+Indicates if the graph should be centered on the PostScript page.
+If \fIboolean\fR is false, the the graph will be placed in the
+upper left corner of the page.  The default is \fC1\fR.
+.TP
+\fB\-colormap \fIvarName\fR
+\fIVarName\fR must be the name of a global array variable
+that specifies a color mapping from the X color name to PostScript.
+Each element of \fIvarName\fR must consist of PostScript
+code to set a particular color value (e.g. ``\fC1.0 1.0 0.0 setrgbcolor\fR'').
+When outputting color information in PostScript, the graph checks
+to see if there is an element of \fIvarName\fR with the same
+name as the color. If so, it uses the value of the element as the 
+PostScript command to set the color.
+If this option hasn't been specified, or if there isn't an entry
+in \fIvarName\fR for a given color, then it uses the red, green,
+and blue intensities from the X color.
+.TP
+\fB\-colormode \fImode\fR
+Specifies how to output color information.  \fIMode\fR must be either
+\fCcolor\fR (for full color output), \fCgray\fR (convert all colors
+to their gray-scale equivalents) or \fCmono\fR (convert foreground colors
+to black and background colors to white).  The default mode is \fCcolor\fR.
+.TP
+\fB\-fontmap \fIvarName\fR
+\fIVarName\fR must be the name of a global array variable
+that specifies a font mapping from the X font name to PostScript.
+Each element of \fIvarName\fR must consist of a Tcl list with
+one or two elements, which are the name and point size of a PostScript font.
+When outputting PostScript commands for a particular font, the graph
+checks to see if \fIvarName\fR contains an element with the same
+name as the specified font. 
+If there is such an element, then the font information contained in
+that element is used in the PostScript output.  (If the point size 
+is omitted from the list, the point size of the X font is used).
+Otherwise the X font is examined in an attempt to guess what PostScript 
+font to use.  This works only for fonts whose foundry property is
+\fIAdobe\fR (such as Times, Helvetica, Courier, etc.).  If all of 
+this fails then the font defaults to \fCHelvetica-Bold\fR.
+.TP
+\fB\-decorations \fIboolean\fR
+Indicates if PostScript commands to generate color backgrounds and 3-D borders 
+should be output.  If \fIboolean\fR is false, the graph will
+background will be white and no 3-D borders will be generated. The
+default is \fC1\fR.
+.TP
+\fB\-height \fIpixels\fR
+Sets the height of the graph.  This lets you print the
+graph with a height different from the one displayed on the screen.
+If \fIpixels\fR is 0, the height is the same as the displayed height.
+The default is \fC0\fR.
+.TP
+\fB\-landscape \fIboolean\fR
+If \fIboolean\fR is true, this specifies the printed area is to 
+be rotated 90 degrees.
+In non-rotated output the \f(BIx\fR axis of the printed area runs along
+the short dimension of the page (``portrait'' orientation);
+in rotated output the \f(BIx\fR axis runs along the long dimension of the
+page (``landscape'' orientation).
+Defaults to \fC0\fR.
+.TP
+\fB\-maxpect \fIboolean\fR
+Indicates to scale the the graph so that it fills the PostScript page.  
+The aspect ratio of the graph is still retained.  The default is \fC0\fR.
+.TP
+\fB\-padx \fIpad\fR
+Sets the horizontal padding for the left and right page borders.  The
+borders are exterior to the graph.
+\fIPad\fR can be a list of one or two numbers.  If \fIpad\fR has two
+elements, the left border is padded by the first value and
+the right border by the second value.  If \fIpad\fR has just one value,
+both the left and right borders are padded evenly by the value.  The
+default is \fC1i\fR.
+.TP
+\fB\-pady \fIpad\fR 
+Sets the vertical padding for the top and bottom
+page borders. The borders are exterior to the graph.  \fIPad\fR can be
+a list of one or two numbers.  If \fIpad\fR has two elements, the top
+border is padded by the first value and the bottom border by the
+second value.  If \fIpad\fR has just one value, both the top and
+bottom borders are padded evenly by the value.  The default is
+\fC1i\fR.
+.TP
+\fB\-paperheight \fIpixels\fR
+Sets the height of the postscript page.  This can be used to
+select between different page sizes (letter, A4, etc).  
+The default height is \fC11.0i\fR.
+.TP
+\fB\-paperwidth \fIpixels\fR
+Sets the width of the postscript page.  This can be used to
+select between different page sizes (letter, A4, etc).  
+The default width is \fC8.5i\fR.
+.TP
+\fB\-width \fIpixels\fR
+Sets the width of the graph.  This lets you print the
+graph with a width different from the one displayed on the screen.
+If \fIpixels\fR is 0, the width is the same as the displayed width.
+The default is \fC0\fR.
+.PP
+Postscript configuration options may be also be set by the
+\fBoption\fR command.  The resource names in the option database are
+prefixed by \fCps\fR, while class names are prefixed by \fCPs\fR. 
+.DS
+option add *Graph.psDecorations false
+option add *Graph.PsLandscape true
+.DE
+.RE
+.TP
+\fIpathName \fBpostscript output \fR?\fIfileName\fR? ?\fIoption value\fR?...
+Outputs a file of encapsulated PostScript to print the graph. 
+If a \fIfileName\fR argument isn't present, the command returns
+the PostScript. If any \fIoption-value\fR pairs are present, they
+set configuration options controlling how the PostScript is generated.
+\fIOption\fR and \fIvalue\fR can be anything accepted by the postscript 
+\fBconfigure\fR operation above.
+.SH "MARKERS"
+Markers are simple drawing procedures used to annotate or highlight
+areas of the graph.  Markers have various types: text strings,
+bitmaps, connected lines, windows, or polygons.  They can be
+associated with a particular element, so that when the element is mapped or
+unmapped, so is the marker.  By default, markers are the last items
+drawn on the graph, so that data elements will appear in behind them.  
+You can change this by configuring the \fB\-under\fR option.
+.PP
+Markers, in contrast to elements, don't affect the scaling of the 
+coordinate axes.  They can also have \fIelastic\fR coordinates
+(specified by \fC-Inf\fR and \fCInf\fR respectively) which translate 
+into the minimum or maximum limit of the axis.  For example, 
+you can place a marker so it always remains in the lower left corner 
+of the plotting area, by using the coordinates \fC-Inf\fR,\fC-Inf\fR.
+.PP
+The following operations are available for markers.
+.TP
+\fIpathName \fBmarker after \fImarkerId\fR ?\fImarkerId\fR?
+Reorders the marker display list placing the first marker after
+the second.  If no second \fImarkerId\fR argument is specified, the marker
+is placed at the end of the display list.  This command can be used to control
+how markers are displayed since markers are drawn in the order of this
+display list.  
+.TP
+\fIpathName \fBmarker before \fImarkerId\fR ?\fImarkerId\fR?
+Reorders the marker display list placing the first marker before
+the second.  If no second \fImarkerId\fR argument is specified, the marker
+is placed at the beginning of the display list.  This command can be used to
+control how markers are displayed since markers are drawn in the order of
+this display list.  
+.TP
+\fIpathName \fBmarker cget \fIoption\fR
+Returns the current value of the marker configuration option given by
+\fIoption\fR.  \fIOption\fR may be any one of the options described below
+in the \fBconfigure\fR operation.
+.TP
+\fIpathName \fBmarker configure \fImarkerId\fR ?\fIoption value\fR?...
+Queries or modifies the configuration options for markers.  If
+\fIoption\fR isn't specified, a list describing all of the current
+options for \fImarkerId\fR is returned.  If \fIoption\fR is specified,
+but not \fIvalue\fR, then a list describing \fIoption\fR is
+returned.  If one or more \fIoption\fR and \fIvalue\fR pairs are
+specified, then for each pair, the marker option \fIoption\fR is set
+to \fIvalue\fR.  
+.sp
+The following options are valid for all markers.
+Each type of marker also has its own type-specific options.  
+They are described in the sections below.
+.RS
+.TP
+\fB\-coords \fIcoordList\fR
+Specifies the coordinates of the marker.  \fICoordList\fR is 
+a list of x and y graph coordinates.  The number of coordinates
+is dependent upon the type of marker.  Text, bitmap, and window markers
+need only two coordinates (an x and y coordinate).  Line markers
+need at least four coordinates, polygons at least six.
+If \fIcoordList\fR is \fC""\fR, the marker will not be displayed.
+The default is \fC""\fR.
+.TP
+\fB\-element \fIelemName\fR
+Links the marker with the element \fIelemName\fR.  The marker is
+displayed only if the element is also currently displayed (see the
+element's \fBshow\fR operation).  If \fIelemName\fR is \fC""\fR, the
+marker is always displayed.  The default is \fC""\fR.
+.TP
+\fB\-mapped \fIboolean\fR 
+Indicates if the marker is to be drawn. If \fIboolean\fR is true,
+the marker is displayed.  The default is \fC1\fR.
+.TP
+\fB\-mapx \fIxAxis\fR 
+Specifies which x-axis to map the marker's x-coordinates onto.
+\fIXAxis\fR must be either \fCx\fR, \fCx2\fR, or \fCboth\fR.  The
+default is \fCx\fR.
+.TP
+\fB\-mapy \fIyAxis\fR
+Specifies which y-axis to map the marker's y-coordinates onto.
+\fIYAxis\fR must be either \fCy\fR, \fCy2\fR, or \fCboth\fR.  The
+default is \fCy\fR.
+.TP
+\fB\-name \fImarkerId\fR
+Changes the identifier for the marker.  The identifier \fImarkerId\fR 
+can not already be used by another marker.  If this option
+isn't specified, the marker's name is uniquely generated.
+.TP
+\fB\-under \fIboolean\fR
+Indicates if the marker should be drawn before or after the data
+elements.  If \fIboolean\fR is true, the marker is be displayed
+underneath the data element symbols and lines.  Otherwise, the marker is
+drawn on top of the element.  The default is \fC0\fR.
+.TP
+\fB\-xoffset \fIpixels\fR
+Specifies a screen distance to offset the marker horizontally. 
+\fIPixels\fR is a valid screen distance, such as \fC2\fR or \fC1.2i\fR.
+The default is \fC0\fR.
+.TP
+\fB\-yoffset \fIpixels\fR
+Specifies a screen distance to offset the markers vertically.
+\fIPixels\fR is a valid screen distance, such as \fC2\fR or \fC1.2i\fR.
+The default is \fC0\fR.
+.PP
+Marker configuration options may also be set by the \fBoption\fR command.
+The resource names in the option database are prefixed by \fCbmMarker\fR,
+\fCtextMarker\fR, \fClineMarker\fR, \fCpolyMarker\fR, or \fCwinMarker\fR with
+respect to the marker type.  Class names are prefixed by \fCMarker\fR.
+.DS
+\fCoption add *Graph.MarkerBackground blue\fR
+\fCoption add *Graph.textMarkerForeground white\fR
+.DE
+.RE
+.TP
+\fIpathName \fBmarker create \fItype\fR ?\fIoption value\fR?...
+Creates a marker of the selected type. \fIType\fR may be either
+\fCtext\fR, \fCline\fR, \fCbitmap\fR, \fCpolygon\fR, or \fCwindow\fR.
+This command returns the marker identifier, which is used as the 
+\fImarkerId\fR argument in the other marker-related commands.
+If the \fB\-name\fR option is used, this overrides the normal
+marker identifier.  If the name provided is already used for
+another marker, the new marker will replace the old.
+.TP
+\fIpathName \fBmarker delete\fR ?\fIpattern\fR?...
+Removes the markers with identifiers matching \fIpattern\fR.  
+.TP
+\fIpathName \fBmarker exists \fImarkerId\fR
+Returns \fC1\fR if the marker \fImarkerId\fR exists and \fC0\fR otherwise.
+.TP
+\fIpathName \fBmarker ids\fR ?\fIpattern\fR? 
+Returns a list of IDs of markers created.  If \fIpattern\fR is supplied,
+only those markers whose IDs matching it will be returned.
+.TP
+\fIpathName \fBmarker type \fImarkerId\fR 
+Returns the type of the marker given by \fImarkerId\fR, such as
+\fCLine\fR or \fCText\fR. 
+If \fImarkerId\fR is not a valid a marker identifier, \fC""\fR is returned.
+.SS "TEXT MARKERS"
+A text marker displays a string of characters on one or more lines of
+text.  Embedded newlines cause line breaks.  They may be used to
+annotate regions of the graph.  Text markers are created with the
+\fBcreate\fR operation in the form:
+.DS
+\fIpathName \fBmarker create text \fR?\fIoption value\fR?...
+.DE
+There may be any number of \fIoption\fR-\fIvalue\fR pairs, 
+each of which sets one of the configuration options for the text marker.  
+These same \fIoption\fR\-\fIvalue\fR pairs may be used with the 
+marker's \fBconfigure\fR operation.  
+.PP
+The following options are specific to text markers:
+.TP
+\fB\-anchor \fIanchor\fR
+\fIAnchor\fR tells how to position the text relative to the
+positioning point for the text. For example, if \fIanchor\fR is
+\fCcenter\fR then the text is centered on the point; if
+\fIanchor\fR is \fCn\fR then the text will be drawn such that the
+top center point of the rectangular region occupied by the text will
+be at the positioning point.  This default is \fCcenter\fR.
+.TP
+\fB\-background \fIcolor\fR
+Sets the background color of the text string.  
+If \fIcolor\fR is \fC""\fR, the background will be transparent.
+The default is \fCwhite\fR.
+.TP
+\fB\-font \fIfontName\fR
+Specifies the font of the text.
+The default is \fC*-Helvetica-Bold-R-Normal-*-120-*\fR.
+.TP
+\fB\-foreground \fIcolor\fR
+Sets the foreground color of the text.  
+The default is \fCblack\fR.
+.TP
+\fB\-justify \fIjustify\fR
+Specifies how the text should be justified.  This matters only
+when the marker contains more than one line of text. \fIJustify\fR must
+be \fCleft\fR, \fCright\fR, or \fCcenter\fR.  The
+default is \fCcenter\fR.
+.TP
+\fB\-padx \fIpad\fR
+Sets the padding to the left and right exteriors of the text.
+\fIPad\fR can be a list of one or two numbers.  If \fIpad\fR has two
+elements, the left side of the text is padded by the first value and
+the right side by the second value.  If \fIpad\fR has just one value,
+both the left and right sides are padded evenly by the value.  The
+default is \fC4\fR.
+.TP
+\fB\-pady \fIpad\fR
+Sets the padding above and below the text.  \fIPad\fR can be a list
+of one or two numbers.  If \fIpad\fR has two elements, the area above
+the text is padded by the first value and the area below by the
+second value.  If \fIpad\fR is just one number, both the top and
+bottom areas are padded by the value.  The default is \fC4\fR.
+.TP
+\fB\-rotate \fItheta\fR
+Specifies the number of degrees to rotate the text.  \fITheta\fR is a real
+number representing the angle of rotation.  The marker is first rotated
+along its center and is then displayed according to its anchor
+position. The default is \fC0.0\fR.
+.TP
+\fB\-text \fItext\fR
+Specifies the text of the marker.  The exact way
+in which the text is displayed may be affected by other options
+such as \fB\-anchor\fR or \fB\-rotate\fR.  
+.SS "LINE MARKERS"
+A line marker displays one or more connected line segments on the graph.
+Line markers are created with marker's \fBcreate\fR operation in the form:
+.DS
+\fIpathName \fBmarker create line \fR?\fIoption value\fR?...
+.DE
+There may be any number of \fIoption\fR-\fIvalue\fR
+pairs, each of which sets one of the configuration options
+for the marker.  These same \fIoption\fR-\fIvalue\fR pairs may be
+used with the marker's \fBconfigure\fR operation.
+.PP
+The following options are specific to line markers:
+.TP
+\fB\-background \fIcolor\fR
+Sets the background color of the line.
+The option is affects the line color only when the \fB\-stipple\fR option 
+is set.  
+If this option isn't specified then it defaults to \fCwhite\fR.
+.TP
+\fB\-dashes \fIdashList\fR
+Sets the dash style of the line. \fIDashList\fR is a list of up to 11
+numbers which alternately represent the lengths of the dashes and gaps
+on the line.  Each number must be between 1 and 255.  If
+\fIdashList\fR is \fC""\fR, the marker line will be solid.
+.TP
+\fB\-foreground \fIcolor\fR
+Sets the foreground color.  The default foreground color is \fCblack\fR.
+.TP
+\fB\-linewidth \fIpixels\fR
+Sets the width of the lines.
+The default width is \fC0\fR.
+.TP
+\fB\-stipple \fIbitmap\fR
+Indicates that the line should be drawn with a stippled pattern rather
+than solid. \fIBitmap\fR specifies a bitmap to use as the stipple
+pattern.  If \fIbitmap\fR is \fC""\fR, then the
+line is drawn in a solid fashion. The default is \fC""\fR.
+.SS "BITMAP MARKERS"
+A bitmap marker displays a bitmap on the graph.  Bitmap markers are
+created with the marker's \fBcreate\fR operation in the form:
+.DS
+\fIpathName \fBmarker create bitmap \fR?\fIoption value\fR?...
+.DE
+There may be any number of \fIoption\fR-\fIvalue\fR
+pairs, each of which sets one of the configuration options
+for the marker.  These same \fIoption\fR\-\fIvalue\fR pairs may be
+used with the marker's \fBconfigure\fR operation.
+.PP
+The following options are specific to bitmap markers:
+.TP
+\fB\-anchor \fIanchor\fR
+\fIAnchor\fR tells how to position the bitmap relative to the
+positioning point for the bitmap. For example, if \fIanchor\fR
+is \fCcenter\fR then the bitmap is centered on the point;  if
+\fIanchor\fR is \fCn\fR then the bitmap will be drawn such that
+the top center point of the rectangular region occupied by the
+bitmap will be at the positioning point.
+This option defaults to \fCcenter\fR.
+.TP
+\fB\-background \fIcolor\fR
+Sets the background color of the bitmap.
+If \fIcolor\fR is \fC""\fR, the background color will be transparent.
+The default background color is \fCwhite\fR.
+.TP
+\fB\-foreground \fIcolor\fR
+Sets the foreground color of the bitmap.  
+The default foreground color is \fCblack\fR.
+.TP
+\fB\-bitmap \fIbitmap\fR
+Specifies the bitmap to be displayed.
+If \fIbitmap\fR is \fC""\fR, the marker will not be
+displayed.  The default is \fC""\fR.
+.TP
+\fB\-rotate \fItheta\fR
+Sets the rotation of the bitmap.  \fITheta\fR is a real number
+representing the angle of rotation in degrees.  The marker is first
+rotated and then placed according to its anchor position.  The default
+rotation is \fC0.0\fR.
+.SS "POLYGON MARKERS"
+A polygon marker displays a closed region described as two or more
+connected line segments on the graph.  It is assumed the first and
+last points are connected.  Polygon markers are created using the
+marker \fBcreate\fR operation in the form:
+.DS
+\fIpathName \fBmarker create polygon \fR?\fIoption value\fR?...
+.DE
+There may be any number of \fIoption\fR-\fIvalue\fR
+pairs, each of which sets one of the configuration options
+for the marker.  These same \fIoption\fR\-\fIvalue\fR pairs may be
+used with the \fBmarker configure\fR command to change the marker's
+configuration.
+The following options are supported for polygon markers:
+.TP
+\fB\-dashes \fIdashList\fR
+Sets the dash style of the outline of the polygon. \fIDashList\fR is a
+list of up to 11 numbers which alternately represent the lengths of
+the dashes and gaps on the outline.  Each number must be between 1 and
+255. If \fIdashList\fR is \fC""\fR, the outline will be a solid line.
+.TP
+\fB\-fill \fIcolor\fR
+Sets the fill color of the polygon.  If \fIcolor\fR is \fC""\fR, then
+the interior of the polygon is transparent.
+The default is \fCwhite\fR.
+.TP
+\fB\-linewidth \fIpixels\fR
+Sets the width of the outline of the polygon. If \fIpixels\fR is zero, 
+no outline is drawn. The default is \fC0\fR.
+.TP
+\fB\-outline \fIcolor\fR
+Sets the color of the outline of the polygon.  If the polygon is
+stippled (see the \fB\-stipple\fR option), then this represents the
+foreground color of the stipple.  The default is \fCblack\fR.
+.TP
+\fB\-stipple \fIbitmap\fR
+Indicates that the polygon should be drawn with a stippled pattern
+rather than a solid color. \fIBitmap\fR specifies a bitmap to use as
+the stipple pattern.  If \fIbitmap\fR is \fC""\fR, then the polygon is
+filled with a solid color (if the \fB\-fill\fR option is set).  The
+default is \fC""\fR.
+.SS "WINDOW MARKERS"
+A window marker displays a widget at a given position on the graph.
+Window markers are created with the marker's \fBcreate\fR operation
+in the form:
+.DS
+\fIpathName \fBmarker create window \fR?\fIoption value\fR?...
+.DE
+There may be any number of \fIoption\fR-\fIvalue\fR
+pairs, each of which sets one of the configuration options
+for the marker.  These same \fIoption\fR\-\fIvalue\fR pairs may be
+used with the marker's \fBconfigure\fR command.
+.PP
+The following options are specific to window markers:
+.TP
+\fB\-anchor \fIanchor\fR
+\fIAnchor\fR tells how to position the widget relative to the
+positioning point for the widget. For example, if \fIanchor\fR
+is \fCcenter\fR then the widget is centered on the point;  if
+\fIanchor\fR is \fCn\fR then the widget will be displayed such that
+the top center point of the rectangular region occupied by the
+widget will be at the positioning point.
+This option defaults to \fCcenter\fR.
+.TP
+\fB\-height \fIpixels\fR
+Specifies the height to assign to the marker's window.  If this option
+isn't specified, or if it is specified as \fC""\fR, then the window is given
+whatever height the widget requests internally.
+.TP
+\fB\-width \fIpixels\fR
+Specifies the width to assign to the marker's window.  If this option
+isn't specified, or if it is specified as \fC""\fR, then the window is given
+whatever width the widget requests internally.
+.TP
+\fB\-window \fIpathName\fR
+Specifies the widget to be managed by the graph.
+\fIPathName\fR must be a child of the \fBgraph\fR widget.
+.SH "C LANGUAGE API"
+You can manipulate a graph's data elements from the C language.  There
+may be situations where it is too expensive to translate the data
+values from ASCII strings.  Or you might want to read data in a
+special file format.
+.PP
+The convenience function \fBBlt_GraphElement\fR no longer exists.
+But data can manipulated from the C language using BLT vectors instead.
+You specify the x and y data coordinates of an element as vectors and
+manipulate the vector from C.  The graph will be redrawn automatically
+after the vectors are updated.
+.PP
+From Tcl, create the vectors and configure the element to use them.
+.DS
+vector x y
+\&.graph element configure line1 -xdata x -ydata y
+.DE
+To set data points from C, you pass the values as arrays of doubles
+using the \fBBlt_ResetVector\fR call.  The vector is reset with the
+new data and at the next idle point (when Tk re-enters its event
+loop), the graph will be redrawn automatically.
+.DS
+#include <tcl.h>
+#include <blt.h>
+
+register int i;
+Blt_Vector x, y;
+
+/* Allocate space for the new vectors */
+x.numValues = x.arraySize = 50;
+y.numValues = y.arraySize = 50;
+x.valueArr = (double *)malloc(sizeof(double) * 50);
+y.valueArr = (double *)malloc(sizeof(double) * 50);
+
+/* Write the data points into the vectors */
+for (i = 0; i < 50; i++) {
+    x.valueArr[i] = i * 0.02;
+    y.valueArr[i] = sin(x.valueArr[i]);
+}	
+
+/* Update the BLT vectors "x" and "y" */
+if ((Blt_ResetVector(interp, "x", &x, TCL_DYNAMIC) != TCL_OK) ||
+    (Blt_ResetVector(interp, "y", &y, TCL_DYNAMIC) != TCL_OK)) {
+	return TCL_ERROR;
+}
+.DE
+.SH SPEED TIPS
+There may be cases where the graph needs to be drawn and updated as
+quickly as possible.  If the graph's drawing speed becomes a big
+problem,  here are a few tips to speed up displays.
+.TP 2
+\(bu 
+Try to minimize the number of data points.  The more data points the
+graph looks at, the more work the graph must do.  
+.TP 2
+\(bu 
+If your data is generated as floating point values, the time required
+to convert the data values to and from ASCII strings can be
+significant, especially when there any many data points.  You can
+avoid the redundant string-to-decimal conversions using the C API to
+BLT vectors.
+.TP 2
+\(bu
+Data elements without symbols are displayed faster than with symbols.
+Set the data element's \fB\-symbol\fR option to \fCnone\fR.  If you need to
+draw symbols, try using the simple symbols such as \fCsplus\fR and
+\fCscross\fR.
+.TP 2
+\(bu
+Don't stipple or dash the element.  Solid lines are much faster.
+.TP 2
+\(bu 
+If you update data elements frequently, try turning off the
+\fB\-bufferelements\fR option for the graph.  When the graph is first
+displayed, it draws data elements into an internal pixmap.  The pixmap
+acts as a cache, so that when the graph needs to be redrawn again, and
+the data elements or coordinate axes haven't changed, the pixmap is
+simply copied to the screen.  This is especially useful when you are
+using markers to highlight points and regions on the graph.  But if
+the graph is updated frequently, changing either the element data or
+coordinate axes, the buffering becomes redundant.
+.SH LIMITATIONS
+Auto-scale routines do not use requested min/max limits
+as boundaries when the axis is logarithmically scaled.  
+.PP
+The PostScript output generated for polygons with more than 1500 points 
+may exceed the limits of some printers (See PostScript Language Reference 
+Manual, page 568).  The work-around is to break the polygon into
+separate pieces.
+.SH KEYWORDS
+graph, widget

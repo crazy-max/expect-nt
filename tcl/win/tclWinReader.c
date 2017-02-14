@@ -74,6 +74,8 @@ TclWinReaderNew(postWin, postMsg, file)
 	    if (infoPtr->rType == FILE_TYPE_CHAR) {
 		if (GetConsoleMode(file, &dw) == TRUE) {
 		    infoPtr->rType = FILE_TYPE_CONSOLE;
+		} else {
+		    dw = GetLastError();
 		}
 	    }
 	}
@@ -99,8 +101,6 @@ TclWinReaderNew(postWin, postMsg, file)
     infoPtr->rGoEvent = NULL;
     infoPtr->rHandleClosed = FALSE;
 
-    infoPtr->refCount = 1;
-
     return infoPtr;
 }
 
@@ -125,18 +125,65 @@ void
 TclWinReaderFree(infoPtr)
     TclWinReaderInfo *infoPtr;
 {
-    if (--infoPtr->refCount <= 0) {
+    if (infoPtr->rSemaphore != NULL) {
 	CloseHandle(infoPtr->rSemaphore);
-	CloseHandle(infoPtr->rOverResult.hEvent);
-	CloseHandle(infoPtr->rEvent);
-	CloseHandle(infoPtr->rGoEvent);
-	CloseHandle(infoPtr->rThread);
-
-	if (infoPtr->rData) {
-	    ckfree(infoPtr->rData);
-	}
-	ckfree((char *) infoPtr);
+	infoPtr->rSemaphore = NULL;
     }
+    if (infoPtr->rOverResult.hEvent != NULL) {
+	CloseHandle(infoPtr->rOverResult.hEvent);
+	infoPtr->rOverResult.hEvent = NULL;
+    }
+    if (infoPtr->rEvent != NULL) {
+	CloseHandle(infoPtr->rEvent);
+	infoPtr->rEvent = NULL;
+    }
+    if (infoPtr->rGoEvent != NULL) {
+	CloseHandle(infoPtr->rGoEvent);
+	infoPtr->rGoEvent = NULL;
+    }
+    if (infoPtr->rThread != NULL) {
+	CloseHandle(infoPtr->rThread);
+	infoPtr->rThread = NULL;
+    }
+
+    if (infoPtr->rData) {
+	ckfree(infoPtr->rData);
+    }
+    ckfree((char *) infoPtr);
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * TclWinReaderDestroy --
+ *
+ *	If the reader thread is still running, destroy it.
+ *
+ * Results:
+ *	0 if the thread was no longer running.
+ *	1 if this routine destroyed the thread
+ *
+ *----------------------------------------------------------------------
+ */
+
+int
+TclWinReaderDestroy(infoPtr)
+    TclWinReaderInfo *infoPtr;
+{
+    DWORD exitCode;
+
+    if (GetExitCodeThread(infoPtr->rThread, &exitCode) == 0) {
+	return 0;
+    }
+    if (exitCode == STILL_ACTIVE) {
+	TerminateThread(infoPtr->rThread, 10);
+	Sleep(10);
+	GetExitCodeThread(infoPtr->rThread, &exitCode);
+    }
+    if (exitCode == 10) {
+	return 1;
+    }
+    return 0;
 }
 
 /*
@@ -181,11 +228,9 @@ TclWinReaderStart(infoPtr, threadProc)
     }
     infoPtr->rData = ckalloc(READER_BUFFER_SIZE);
 
-    infoPtr->refCount++;
     infoPtr->rThread = CreateThread(NULL, 0, threadProc, infoPtr, 0,
 				     &threadId);
     if (infoPtr->rThread == NULL) {
-	--infoPtr->refCount;
 	goto error;
     }
 
@@ -252,18 +297,18 @@ TclWinReaderThread(arg)
     while (1) {
 	nloopcnt = 0;
 	if (infoPtr->rHandleClosed) break;
-	if (infoPtr->rType == FILE_TYPE_PIPE) {
-	    nread = 0;
-	    PeekNamedPipe(handle, NULL, 0, NULL, &nread, NULL);
-	    if (nread == 0) {
+	do {
+	    if (infoPtr->rType == FILE_TYPE_PIPE) {
+		nread = 0;
+		PeekNamedPipe(handle, NULL, 0, NULL, &nread, NULL);
+		if (nread == 0) {
+		    nread = 1;
+		}
+	    } else if (infoPtr->rType == FILE_TYPE_CONSOLE) {
+		nread = READER_BUFFER_SIZE;
+	    } else {
 		nread = 1;
 	    }
-	} else if (infoPtr->rType == FILE_TYPE_CONSOLE) {
-	    nread = READER_BUFFER_SIZE;
-	} else {
-	    nread = 1;
-	}
-	do {
 	    nmax = READER_BUFFER_SIZE - n;
 	    nread = min(nread, nmax);
 	    if (overResult) {
@@ -317,7 +362,7 @@ TclWinReaderThread(arg)
 
 	infoPtr->rData[n] = 0;
 	infoPtr->rDataLen = n;
-	if (n > 0) {
+	if (nloopcnt > 0) {
 	    if (infoPtr->rType == FILE_TYPE_CONSOLE) {
 		ResetEvent(infoPtr->rGoEvent);
 	    }
@@ -339,21 +384,18 @@ TclWinReaderThread(arg)
 		}
 	    }
 	    nloopcnt = 0;
-	} else if (cnt <= 0 && n <= 0) {
-	    infoPtr->rDataLen = 0;
-	    infoPtr->rData[0] = 0;
+	} else if (cnt <= 0 && nloopcnt <= 0) {
 	    break;
 	}
     }
 
  done:
-    infoPtr->eof = 1;
-    PostMessage(infoPtr->postWin, READER_MESSAGE, (UINT) handle, TCL_READABLE);
-    SetEvent(infoPtr->rEvent);
+    if (! infoPtr->rHandleClosed) {
+	infoPtr->eof = 1;
+	PostMessage(infoPtr->postWin, READER_MESSAGE, (UINT) handle, TCL_READABLE);
+	SetEvent(infoPtr->rEvent);
+    }
 
-    WaitForSingleObject(infoPtr->rSemaphore, INFINITE);
-
-    TclWinReaderFree(infoPtr);
     ExitThread(0);
     return 0;
 }

@@ -1,0 +1,76 @@
+#!/home/mike/bin/wish8
+#-------------------------------------------------------------------------
+#
+# This script illustrates the usage of tkbusy. It creates 12 toplevel
+# windows, centered on the screen, each of them containing $maxrow*$maxcol
+# entries or buttons. Another toplevel contains two buttons which allow to
+# enable or disable the interface. Typing ^C terminates the application,
+# unless it is in busy mode.
+#
+# Author: Michael Schumacher (mike@hightec.saarlink.de).
+# Copyright: Public domain.
+#
+#-------------------------------------------------------------------------
+
+proc create_window { nr } {
+  set top .top$nr
+  toplevel $top
+  wm withdraw $top
+  set maxrow 3
+  set maxcol 3
+  for { set r 1 } { $r <= $maxrow } { incr r } {
+    for { set c 1 } { $c <= $maxcol } { incr c } {
+      set tnr [expr ($r - 1) * $maxcol + $c]
+      set obj ${top}.${r}${c}
+      if { [expr $tnr & 1] } {
+        entry $obj -width 8
+        $obj insert 0 ${nr}.${r}.${c}
+        bind $obj <1> "puts \"I'm entry $obj\""
+      } else {
+        button $obj -text ${nr}.${r}.${c} -command "puts \"I'm button $obj\""
+      }
+      grid $obj -row $r -column $c -sticky news
+      grid columnconfigure $top $c -weight 1
+    }
+    grid rowconfigure $top $r -weight 1
+  }
+  update
+  set sw [winfo screenwidth .]
+  set sh [winfo screenheight .]
+  set rw [expr [winfo reqwidth $top] + 10]
+  set rh [expr [winfo reqheight $top] + 25]
+  set pw [expr ($sw - 3 * $rw) / 2 + ($nr - 1) % 3 * $rw]
+  set ph [expr ($sh - 4 * $rh) / 2 + int(($nr - 1) / 3) * $rh]
+  wm geometry $top +$pw+$ph
+  wm protocol $top WM_DELETE_WINDOW bell
+  wm deiconify $top
+}
+
+# "main()"
+wm withdraw .
+
+# load the tkbusy command
+source tkbusy.tcl
+
+for { set i 1 } { $i <= 12 } { incr i } { create_window $i }
+toplevel .t; wm title .t "tkbusy demo"
+button .t.busyon -text "busy on" -command {
+  .t.busyoff configure -state normal
+  .t.busyon configure -state disabled
+  tkbusy on .t.busyoff
+}
+button .t.busyoff -text "busy off" -state disabled -command {
+  .t.busyon configure -state normal
+  .t.busyoff configure -state disabled
+  tkbusy off
+}
+pack .t.busyoff .t.busyon -side right -fill both -expand 1
+bind all <Control-c> { destroy . }
+focus .t.busyon
+
+# let's see how fa(s)t we are...
+tkwait visibility .t; .t.busyon invoke; .t.busyoff invoke ;# fill cache
+set duration [time {.t.busyon invoke;.t.busyoff invoke} 10]
+label .t.l -text "busy cycle time: [expr [lindex $duration 0] / 1000] ms"
+pack .t.l -side left -fill x -expand 1
+# EOF

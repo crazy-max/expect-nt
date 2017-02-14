@@ -11,7 +11,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkFont.c 1.72 97/07/22 15:33:45
+ * SCCS: @(#) tkFont.c 1.74 97/10/10 14:34:11
  */
 
 #include "tkInt.h"
@@ -209,7 +209,7 @@ static int		ConfigAttributesObj _ANSI_ARGS_((Tcl_Interp *interp,
 			    Tk_Window tkwin, int objc, Tcl_Obj *CONST objv[],
 			    TkFontAttributes *faPtr));
 static int		FieldSpecified _ANSI_ARGS_((CONST char *field));
-static void		GetAttributeInfoObj _ANSI_ARGS_((Tcl_Interp *interp,
+static int		GetAttributeInfoObj _ANSI_ARGS_((Tcl_Interp *interp,
 			    CONST TkFontAttributes *faPtr, Tcl_Obj *objPtr));
 static LayoutChunk *	NewChunk _ANSI_ARGS_((TextLayout **layoutPtrPtr,
 			    int *maxPtr, CONST char *start, int numChars,
@@ -354,7 +354,7 @@ Tk_FontObjCmd(clientData, interp, objc, objv)
 
     switch ((enum options) index) {
 	case FONT_ACTUAL: {
-	    int skip;
+	    int skip, result;
 	    Tk_Font tkfont;
 	    Tcl_Obj *objPtr;
 	    CONST TkFontAttributes *faPtr;
@@ -372,14 +372,16 @@ Tk_FontObjCmd(clientData, interp, objc, objv)
 	    if (tkfont == NULL) {
 		return TCL_ERROR;
 	    }
+	    objc -= skip;
+	    objv += skip;
 	    faPtr = GetFontAttributes(tkfont);
 	    objPtr = NULL;
 	    if (objc > 3) {
-		objPtr = objv[3 + skip];
+		objPtr = objv[3];
 	    }
-	    GetAttributeInfoObj(interp, faPtr, objPtr);
+	    result = GetAttributeInfoObj(interp, faPtr, objPtr);
 	    Tk_FreeFont(tkfont);
-	    break;
+	    return result;
 	}
 	case FONT_CONFIGURE: {
 	    int result;
@@ -413,8 +415,7 @@ Tk_FontObjCmd(clientData, interp, objc, objv)
 		UpdateDependantFonts(fiPtr, tkwin, namedHashPtr);
 		return result;
 	    }
-	    GetAttributeInfoObj(interp, &nfPtr->fa, objPtr);
-	    break;
+	    return GetAttributeInfoObj(interp, &nfPtr->fa, objPtr);
 	}
 	case FONT_CREATE: {
 	    int skip, i;
@@ -511,7 +512,7 @@ Tk_FontObjCmd(clientData, interp, objc, objv)
 	    Tk_Font tkfont;
 	    int length, skip;
 	    
-	    skip = TkGetDisplayOf(interp, objc - 2, objv + 2, &tkwin);
+	    skip = TkGetDisplayOf(interp, objc - 3, objv + 3, &tkwin);
 	    if (skip < 0) {
 		return TCL_ERROR;
 	    }
@@ -538,7 +539,7 @@ Tk_FontObjCmd(clientData, interp, objc, objv)
 		"-ascent", "-descent", "-linespace", "-fixed", NULL
 	    };
 
-	    skip = TkGetDisplayOf(interp, objc - 2, objv + 2, &tkwin);
+	    skip = TkGetDisplayOf(interp, objc - 3, objv + 3, &tkwin);
 	    if (skip < 0) {
 		return TCL_ERROR;
 	    }
@@ -551,6 +552,8 @@ Tk_FontObjCmd(clientData, interp, objc, objv)
 	    if (tkfont == NULL) {
 		return TCL_ERROR;
 	    }
+	    objc -= skip;
+	    objv += skip;
 	    fmPtr = GetFontMetrics(tkfont);
 	    if (objc == 3) {
 		sprintf(buf, "-ascent %d -descent %d -linespace %d -fixed %d",
@@ -559,7 +562,7 @@ Tk_FontObjCmd(clientData, interp, objc, objv)
 			fmPtr->fixed);
 		Tcl_SetStringObj(Tcl_GetObjResult(interp), buf, -1);
 	    } else {
-		if (Tcl_GetIndexFromObj(interp, objv[3 + skip], switches,
+		if (Tcl_GetIndexFromObj(interp, objv[3], switches,
 			"metric", 0, &index) != TCL_OK) {
 		    Tk_FreeFont(tkfont);
 		    return TCL_ERROR;
@@ -1575,6 +1578,21 @@ Tk_ComputeTextLayout(tkfont, string, numChars, wrapLength, justify, flags,
     }
 
     /*
+     * If last line ends with a newline, then we need to make a 0 width
+     * chunk on the next line.  Otherwise "Hello" and "Hello\n" are the
+     * same height.
+     */
+
+    if ((layoutPtr->numChunks > 0) && ((flags & TK_IGNORE_NEWLINES) == 0)) {
+	if (layoutPtr->chunks[layoutPtr->numChunks - 1].start[0] == '\n') {
+	    chunkPtr = NewChunk(&layoutPtr, &maxChunks, start, 0, curX,
+		    1000000000, baseline);
+	    chunkPtr->numDisplayChars = -1;
+	    baseline += height;
+	}
+    }	    
+
+    /*
      * Using maximum line length, shift all the chunks so that the lines are
      * all justified correctly.
      */
@@ -2476,9 +2494,14 @@ ConfigAttributesObj(interp, tkwin, objc, objv, faPtr)
  *	Return information about the font attributes as a Tcl list.
  *
  * Results:
- *	Interp's result object is modified to hold a description of either
- *	the current value of a single option, or a list of all options
- *	and their current values for the given font attributes.
+ *	The return value is TCL_OK if the objPtr was non-NULL and
+ *	specified a valid font attribute, TCL_ERROR otherwise.  If TCL_OK
+ *	is returned, the interp's result object is modified to hold a
+ *	description of either the current value of a single option, or a
+ *	list of all options and their current values for the given font
+ *	attributes.  If TCL_ERROR is returned, the interp's result is
+ *	set to an error message describing that the objPtr did not refer
+ *	to a valid option.
  *
  * Side effects:
  *	None.
@@ -2486,7 +2509,7 @@ ConfigAttributesObj(interp, tkwin, objc, objv, faPtr)
  *---------------------------------------------------------------------------
  */
 
-static void
+static int
 GetAttributeInfoObj(interp, faPtr, objPtr)
     Tcl_Interp *interp;		  	/* Interp to hold result. */
     CONST TkFontAttributes *faPtr;	/* The font attributes to inspect. */
@@ -2503,9 +2526,9 @@ GetAttributeInfoObj(interp, faPtr, objPtr)
     start = 0;
     end = FONT_NUMFIELDS;
     if (objPtr != NULL) {
-	if (Tcl_GetIndexFromObj(NULL, objPtr, fontOpt, "option", 1,
+	if (Tcl_GetIndexFromObj(interp, objPtr, fontOpt, "option", 1,
 		&index) != TCL_OK) {
-	    return;
+	    return TCL_ERROR;
 	}
 	start = index;
 	end = index + 1;
@@ -2561,6 +2584,7 @@ GetAttributeInfoObj(interp, faPtr, objPtr)
 	    }
 	}
     }
+    return TCL_OK;
 }
 
 /*

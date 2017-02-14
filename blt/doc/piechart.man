@@ -1,0 +1,255 @@
+'\"
+'\" This man page was derived from the tk_stripchart.3 man page.
+'\" by Francis Gardner.
+'\"
+'\" 13/10/92 (or 10/13/92 if you are American)
+'\"
+'\" Copyright 1990 Regents of the University of California
+'\" Permission to use, copy, modify, and distribute this
+'\" documentation for any purpose and without fee is hereby
+'\" granted, provided that this notice appears in all copies.
+'\" The University of California makes no representations about
+'\" the suitability of this material for any purpose.  It is
+'\" provided "as is" without express or implied warranty.
+'\"
+'/"
+.so man.macros
+.HS piechart BLT
+.BS
+'\" Note:  do not modify the .SH NAME line immediately below!
+.SH NAME
+piechart \- Create and manipulate piechart widgets.
+.SH SYNOPSIS
+\fBpiechart\fI \fIpathName \fR?\fIoptions\fR?
+.BE
+.SH "STANDARD OPTIONS"
+.LP
+.nf
+.ta 4c 8c 12c
+\fBborderWidth\fR	\fBfont\fR	\fBrelief\fR	\fBcursor\fR
+\fBbackGround\fR	
+.fi
+.LP
+See the ``options'' manual entry for details on the standard options.
+.SH "WIDGET-SPECIFIC OPTIONS"
+.ta 4c
+.LP
+.nf
+Name:   \fBcommand\fR
+Class:  \fBCommand\fR
+Command-Line Switch:    \fB\-command\fR
+.fi
+.IP
+Specifies a TCL command to be periodically executed every
+\fIinterval\fR milliseconds, when the callback has been started.
+.LP
+.nf
+Name:   \fBdata\fR
+Class:  \fBData\fR
+Command-Line Switch:    \fB\-data\fR
+.fi
+.IP
+This is a string that can be associated with each widget.
+.LP
+.nf
+Name:   \fBexplode\fR
+Class:  \fBExplode\fR
+Command-Line Switch:    \fB\-explode\fR
+.fi
+.IP
+Specifies the label of the pie wedge that is to be pulled out from the
+others. The \fIexplodewidth\fR option defines how far out to pull it.
+.LP
+.nf
+Name:   \fBexplodewidth\fR
+Class:  \fBExplodewidth\fR
+Command-Line Switch:    \fB\-explodewidth\fR
+.fi
+.IP
+Specifies the number of pixels to pull the exploded wedge out by.
+.LP
+.nf
+Name:   \fBinterval\fR
+Class:  \fBInterval\fR
+Command-Line Switch:    \fB\-interval\fR
+.fi
+.IP
+This specifies the time between sucessive callbacks.
+.LP
+.nf
+Name:   \fBkeyboxsize\fR
+Class:  \fBKeyboxsize\fR
+Command-Line Switch:    \fB\-keyboxsize\fR
+.fi
+.IP
+Specifies the height / width of the coloured box in the key.
+.LP
+.nf
+Name:   \fBkeyorder\fR
+Class:  \fBKeyorder\fR
+Command-Line Switch:    \fB\-keyorder\fR
+.fi
+.IP
+Specifies what fields are displayed in the key, and in what order. The
+\fBkeyorder\fR is a string consisting of the letters
+\fBK\fR,\fBV\fR,\fBP\fR and \fBL\fR. These stand for \fIKey box\fR (the
+colored square), \fIValue\fR (the numerical value), \fIP\fR (the
+percentage of the whole) and \fILabel\fR (the textual label of the
+wedge). For example, the string KL would display only the key box
+followed by the label, with no numerical data displayed at all.
+
+This option will probably change in later releases to something more
+like specifying a printf-style format string, with width/precision
+specifiers, etc.
+.LP
+.nf
+Name:   \fBnumdigits\fR
+Class:  \fBNumdigits\fR
+Command-Line Switch:    \fB\-numdigits\fR
+.fi
+.IP
+Specifies the number of decimal places that the percentage value will
+display.
+
+This option will probably be made obselete in later releases. See the
+note on the \fIkeyorder\fR option.
+.LP
+.nf
+Name:   \fBorigin\fR
+Class:  \fBOrigin\fR
+Command-Line Switch:    \fB\-origin\fR
+.fi
+.IP
+Specifies the rotation of the pie, in degrees, clockwise. It specifies
+the angle that the line between the first wedge and the last wedge
+makes with the vertical. That is, if \fBorigin\fR is 0, then there
+will always be a line in the `12 o-clock' position, going straight up. If
+it is 90, then there will be a line in the `3 o-clock' position.
+.LP
+.nf
+Name:   \fBpercentwidth\fR
+Class:  \fBPercentwidth\fR
+Command-Line Switch:    \fB\-percentwidth\fR
+.fi
+.IP
+Specifies the width of the percent field in the key, in pixels.
+
+This option will probably be made obselete in later releases. See the
+note on the \fIkeyorder\fR option.
+.LP
+.nf
+Name:   \fBradius\fR
+Class:  \fBRadius\fR
+Command-Line Switch:    \fB\-radius\fR
+.fi
+.IP
+Specifies the radius of the pie.
+.LP
+.nf
+Name:   \fBtextcolor\fR
+Class:  \fBFourground\fR
+Command-Line Switch:    \fB\-textcolor\fR
+.fi
+.IP
+Specifies the color of the text, that is, the color of the title and
+the color of the text in the key. These should probably be separated
+into two options.
+Name:   \fBtextwidth\fR
+Class:  \fBTextwidth\fR
+Command-Line Switch:    \fB\-textwidth\fR
+.fi
+.IP
+Specifies the width of the label field in the key, in pixels.
+
+This option will probably be made obselete in later releases. See the
+note on the \fIkeyorder\fR option.
+.LP
+.nf
+Name:   \fBtitle\fR
+Class:  \fBTitle\fR
+Command-Line Switch:    \fB\-title\fR
+.fi
+.IP
+This string is placed on the top of the widget as the widgets title.  By
+default there is no title.  Specifying a blank title ("") will remove the
+title.
+.LP
+.nf
+Name:   \fBvaluewidth\fR
+Class:  \fBValuewidth\fR
+Command-Line Switch:    \fB\-valuewidth\fR
+.fi
+.IP
+Specifies the width of the value field in the key, in pixels.
+
+This option will probably be made obselete in later releases. See the
+note on the \fIkeyorder\fR option.
+.LP
+.BE
+
+.SH DESCRIPTION
+.PP
+The \fBpiechart\fR command creates a new window (given by the
+\fIpathName\fR argument) and makes it into a pie widget.
+Additional
+options, described above, may be specified on the command line
+or in the option database
+to configure aspects of the pie such as its colors, font,
+text, and initial relief.  The \fBpiechart\fR command returns its
+\fIpathName\fR argument.  At the time this command is invoked,
+there must not exist a window named \fIpathName\fR, but
+\fIpathName\fR's parent must exist.
+.PP
+A pie is a widget for displaying pie graphs. It creates a rectangular
+widget which contains a pie and a key. The key consists of four
+fields, the \fIKey box\fR (the colored square), \fIValue\fR (the numerical
+value), \fIP\fR (the percentage of the whole) and \fILabel\fR (the
+textual label of the wedge). These can be removed, duplicated or
+re-ordered. 
+
+.SH "WIDGET COMMAND"
+.PP
+The \fBpiechart\fR command creates a new Tcl command whose
+name is \fIpathName\fR.  This
+command may be used to invoke various
+operations on the widget.  It has the following general form:
+.DS C
+\fIpathName option \fR?\fIarg arg ...\fR?
+.DE
+\fIOption\fR and the \fIarg\fRs
+determine the exact behavior of the command.  The following
+commands are possible for pie widgets:
+.TP
+\fIpathName \fBconfigure\fR ?\fIoption\fR? ?\fIvalue option value ...\fR?
+Query or modify the configuration options of the widget.
+If no \fIoption\fR is specified, returns a list describing all of
+the available options for \fIpathName\fR (see \fBTk_ConfigureInfo\fR for
+information on the format of this list).  If \fIoption\fR is specified
+with no \fIvalue\fR, then the command returns a list describing the
+one named option (this list will be identical to the corresponding
+sublist of the value returned if no \fIoption\fR is specified).  If
+one or more \fIoption\-value\fR pairs are specified, then the command
+modifies the given widget option(s) to have the given value(s);  in
+this case the command returns an empty string.
+\fIOption\fR may have any of the values accepted by the \fBpiechart\fR
+command.
+.TP
+\fIpathName \fBget\fR ?\fIlabel\fR ...?
+Returns a list consisting of \fIlabel-value\fR pairs each label in the
+pie, in order specified. If none are specifed, all values are returned.
+.TP
+\fIpathName \fBset\fR \fIlabel value\fR ?\fIlabel value ...\fR?
+Add a new wedge labeled \fIlabel\fR with the specified \fIvalue\fR to
+the pie, or modify the value of the wedge with that label.
+.TP
+\fIpathName \fBstart\fR
+Starts the callback routine.  The Tcl command given in the -command switch
+is executed periodically .  The period is given in the -interval switch
+(in milliseconds).
+.TP
+\fIpathName \fBstop\fR
+Stops the callback routine.
+.TP
+
+.SH KEYWORDS
+pie, widget

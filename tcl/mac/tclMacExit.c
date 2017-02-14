@@ -14,13 +14,14 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclMacExit.c 1.4 96/12/12 15:45:07
+ * SCCS: @(#) tclMacExit.c 1.6 97/11/20 18:37:38
  */
 
 #include "tclInt.h"
 #include "tclMacInt.h"
 #include <SegLoad.h>
 #include <Traps.h>
+#include <Processes.h>
 
 /*
  * Various typedefs and defines needed to patch ExitToShell.
@@ -30,7 +31,7 @@ enum {
         uppExitToShellProcInfo = kPascalStackBased
 };
 
-#if USESROUTINEDESCRIPTORS
+#if GENERATINGCFM
 typedef UniversalProcPtr ExitToShellUPP;
 
 #define CallExitToShellProc(userRoutine)        \

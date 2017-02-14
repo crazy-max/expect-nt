@@ -3,10 +3,10 @@
 # This file defines the default bindings for Tk entry widgets and provides
 # procedures that help in implementing those bindings.
 #
-# SCCS: @(#) entry.tcl 1.46 97/08/12 14:28:34
+# SCCS: @(#) entry.tcl 1.49 97/09/17 19:08:48
 #
 # Copyright (c) 1992-1994 The Regents of the University of California.
-# Copyright (c) 1994-1996 Sun Microsystems, Inc.
+# Copyright (c) 1994-1997 Sun Microsystems, Inc.
 #
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -33,20 +33,18 @@
 #-------------------------------------------------------------------------
 
 bind Entry <<Cut>> {
-    clipboard clear -displayof %W
-    catch {
-	clipboard append -displayof %W \
-	    [string range [%W get] [%W index sel.first]\
-		 [expr [%W index sel.last] - 1]]
+    if {![catch {set data [string range [%W get] [%W index sel.first]\
+		 [expr [%W index sel.last] - 1]]}]} {
+	clipboard clear -displayof %W
+	clipboard append -displayof %W $data
 	%W delete sel.first sel.last
     }
 }
 bind Entry <<Copy>> {
-    clipboard clear -displayof %W
-    catch {
-	clipboard append -displayof %W \
-	    [string range [%W get] [%W index sel.first]\
-		 [expr [%W index sel.last] - 1]]
+    if {![catch {set data [string range [%W get] [%W index sel.first]\
+		 [expr [%W index sel.last] - 1]]}]} {
+	clipboard clear -displayof %W
+	clipboard append -displayof %W $data
     }
 }
 bind Entry <<Paste>> {
@@ -204,6 +202,9 @@ bind Entry <Escape> {# nothing}
 bind Entry <Return> {# nothing}
 bind Entry <KP_Enter> {# nothing}
 bind Entry <Tab> {# nothing}
+if {$tcl_platform(platform) == "macintosh"} {
+	bind Entry <Command-KeyPress> {# nothing}
+}
 
 bind Entry <Insert> {
     catch {tkEntryInsert %W [selection get -displayof %W]}

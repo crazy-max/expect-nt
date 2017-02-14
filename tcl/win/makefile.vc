@@ -4,7 +4,7 @@
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 # 
 # Copyright (c) 1995-1996 Sun Microsystems, Inc.
-# SCCS: @(#) makefile.vc 1.80 97/08/13 13:30:36
+# SCCS: @(#) makefile.vc 1.82 97/11/20 15:14:01
 
 # Does not depend on the presence of any environment variables in
 # order to compile tcl; all needed information is derived from 
@@ -76,7 +76,8 @@ CAT16		= cat16.exe
 CAT32		= cat32.exe
 
 TCLSHOBJS = \
-	$(TMPDIR)\tclAppInit.obj
+	$(TMPDIR)\tclAppInit.obj \
+	$(TMPDIR)\msjexhnd.obj
 
 TCLTESTOBJS = \
 	$(TMPDIR)\tclTest.obj \
@@ -220,7 +221,7 @@ conlibsdll = $(libcdll) $(baselibs)
 ######################################################################
 
 !IFDEF NODEBUG
-cdebug = -Ox
+cdebug = -Oti -Gs -GD
 !ELSE
 cdebug = -Z7 -Od -WX
 !ENDIF
@@ -289,17 +290,17 @@ $(TCLOBJS)
 
 $(TCLSH): $(TCLSHOBJS) $(TCLLIB) $(TMPDIR)\tclsh.res
 	set LIB=$(TOOLS32)\lib
-	$(link32) $(ldebug) $(conlflags) $(TMPDIR)\tclsh.res \
+	$(link32) $(ldebug) $(conlflags) $(TMPDIR)\tclsh.res -stack:2300000 \
 		-out:$@ $(conlibsdll) $(TCLLIB) $(TCLSHOBJS) 
 
 $(TCLSHP): $(TCLSHOBJS) $(TCLPLUGINLIB) $(TMPDIR)\tclsh.res
 	set LIB=$(TOOLS32)\lib
-	$(link32) $(ldebug) $(conlflags) $(TMPDIR)\tclsh.res \
+	$(link32) $(ldebug) $(conlflags) $(TMPDIR)\tclsh.res -stack:2300000 \
 		-out:$@ $(conlibsdll) $(TCLPLUGINLIB) $(TCLSHOBJS) 
 
 $(TCLTEST): $(TCLTESTOBJS) $(TCLLIB) $(TMPDIR)\tclsh.res
 	set LIB=$(TOOLS32)\lib
-	$(link32) $(ldebug) $(conlflags) $(TMPDIR)\tclsh.res -stack:1572864 \
+	$(link32) $(ldebug) $(conlflags) $(TMPDIR)\tclsh.res -stack:2300000 \
 		 -out:$@ $(conlibsdll) $(TCLLIB) $(TCLTESTOBJS)
 
 $(TCL16DLL):  $(WINDIR)\tcl16.rc $(WINDIR)\tclWin16.c
@@ -368,6 +369,9 @@ $(TMPDIR)\testMain.obj: $(WINDIR)\tclAppInit.c
 #
 
 {$(WINDIR)}.c{$(TMPDIR)}.obj:
+    $(cc32) $(TCL_CFLAGS) -Fo$(TMPDIR)\ $<
+
+{$(WINDIR)}.cpp{$(TMPDIR)}.obj:
     $(cc32) $(TCL_CFLAGS) -Fo$(TMPDIR)\ $<
 
 {$(GENERICDIR)}.c{$(TMPDIR)}.obj:

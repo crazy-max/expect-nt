@@ -10,7 +10,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkFocus.c 1.45 97/08/07 14:39:47
+ * SCCS: @(#) tkFocus.c 1.48 97/10/31 09:55:22
  */
 
 #include "tkInt.h"
@@ -22,18 +22,63 @@
  * is a record of the following type:
  */
 
-typedef struct TkFocusInfo {
+typedef struct TkToplevelFocusInfo {
     TkWindow *topLevelPtr;	/* Information about top-level window. */
     TkWindow *focusWinPtr;	/* The next time the focus comes to this
 				 * top-level, it will be given to this
 				 * window. */
-    struct TkFocusInfo *nextPtr;/* Next in list of all focus records for
-				 * a given application. */
-} FocusInfo;
+    struct TkToplevelFocusInfo *nextPtr;
+				/* Next in list of all toplevel focus records
+				 * for a given application. */
+} ToplevelFocusInfo;
+
+/*
+ * One of the following structures exists for each display used by
+ * each application.  These are linked together from the TkMainInfo
+ * structure.  These structures are needed because it isn't
+ * sufficient to store a single piece of focus information in each
+ * display or in each application: we need the cross-product.
+ * There needs to be separate information for each display, because
+ * it's possible to have multiple focus windows active simultaneously
+ * on different displays.  There also needs to be separate information
+ * for each application, because of embedding: if an embedded
+ * application has the focus, its container application also has
+ * the focus.  Thus we keep a list of structures for each application:
+ * the same display can appear in structures for several applications
+ * at once.
+ */
+
+typedef struct TkDisplayFocusInfo {
+    TkDisplay *dispPtr;		/* Display that this information pertains
+				 * to. */
+    struct TkWindow *focusWinPtr;
+				/* Window that currently has the focus for
+				 * this application on this display, or NULL
+				 * if none. */
+    struct TkWindow *focusOnMapPtr;
+				/* This points to a toplevel window that is
+				 * supposed to receive the X input focus as
+				 * soon as it is mapped (needed to handle the
+				 * fact that X won't allow the focus on an
+				 * unmapped window).  NULL means no delayed
+				 * focus op in progress for this display. */
+    int forceFocus;		/* Associated with focusOnMapPtr:  non-zero
+				 * means claim the focus even if some other
+				 * application currently has it. */
+    unsigned long focusSerial;	/* Serial number of last request this
+				 * application made to change the focus on
+				 * this display.  Used to identify stale
+				 * focus notifications coming from the
+				 * X server. */
+    struct TkDisplayFocusInfo *nextPtr;
+				/* Next in list of all display focus
+				 * records for a given application. */
+} DisplayFocusInfo;
 
 /*
  * Global used for debugging.
  */
+
 int tclFocusDebug = 0;
 
 /*
@@ -50,9 +95,10 @@ int tclFocusDebug = 0;
  */
 
 
+static DisplayFocusInfo *FindDisplayFocusInfo _ANSI_ARGS_((TkMainInfo *mainPtr,
+			    TkDisplay *dispPtr));
 static void		FocusMapProc _ANSI_ARGS_((ClientData clientData,
 			    XEvent *eventPtr));
-static TkWindow *	GetFocus _ANSI_ARGS_((TkWindow *winPtr));
 static void		GenerateFocusEvents _ANSI_ARGS_((TkWindow *sourcePtr,
 			    TkWindow *destPtr));
 static void		SetFocus _ANSI_ARGS_((TkWindow *winPtr, int force));
@@ -85,7 +131,7 @@ Tk_FocusCmd(clientData, interp, argc, argv)
     Tk_Window tkwin = (Tk_Window) clientData;
     TkWindow *winPtr = (TkWindow *) clientData;
     TkWindow *newPtr, *focusWinPtr, *topLevelPtr;
-    FocusInfo *focusPtr;
+    ToplevelFocusInfo *tlFocusPtr;
     char c;
     size_t length;
 
@@ -94,7 +140,7 @@ Tk_FocusCmd(clientData, interp, argc, argv)
      */
 
     if (argc == 1) {
-	focusWinPtr = GetFocus(winPtr);
+	focusWinPtr = TkGetFocusWin(winPtr);
 	if (focusWinPtr != NULL) {
 	    interp->result = focusWinPtr->pathName;
 	}
@@ -134,7 +180,7 @@ Tk_FocusCmd(clientData, interp, argc, argv)
 	if (newPtr == NULL) {
 	    return TCL_ERROR;
 	}
-	newPtr = GetFocus(newPtr);
+	newPtr = TkGetFocusWin(newPtr);
 	if (newPtr != NULL) {
 	    interp->result = newPtr->pathName;
 	}
@@ -165,10 +211,11 @@ Tk_FocusCmd(clientData, interp, argc, argv)
 	for (topLevelPtr = newPtr; topLevelPtr != NULL;
 		topLevelPtr = topLevelPtr->parentPtr)  {
 	    if (topLevelPtr->flags & TK_TOP_LEVEL) {
-		for (focusPtr = newPtr->mainPtr->focusPtr; focusPtr != NULL;
-			focusPtr = focusPtr->nextPtr) {
-		    if (focusPtr->topLevelPtr == topLevelPtr) {
-			interp->result = focusPtr->focusWinPtr->pathName;
+		for (tlFocusPtr = newPtr->mainPtr->tlFocusPtr;
+			tlFocusPtr != NULL;
+			tlFocusPtr = tlFocusPtr->nextPtr) {
+		    if (tlFocusPtr->topLevelPtr == topLevelPtr) {
+			interp->result = tlFocusPtr->focusWinPtr->pathName;
 			return TCL_OK;
 		    }
 		}
@@ -227,7 +274,8 @@ TkFocusFilterEvent(winPtr, eventPtr)
      * yet another window.
      */
 
-    FocusInfo *focusPtr;
+    ToplevelFocusInfo *tlFocusPtr;
+    DisplayFocusInfo *displayFocusPtr;
     TkDisplay *dispPtr = winPtr->dispPtr;
     TkWindow *newFocusPtr;
     int retValue, delta;
@@ -264,6 +312,7 @@ TkFocusFilterEvent(winPtr, eventPtr)
      */
 
     retValue = 0;
+    displayFocusPtr = FindDisplayFocusInfo(winPtr->mainPtr, winPtr->dispPtr);
     if (eventPtr->type == FocusIn) {
 	/*
 	 * Skip FocusIn events that cause confusion
@@ -298,7 +347,7 @@ TkFocusFilterEvent(winPtr, eventPtr)
     } else if (eventPtr->type == FocusOut) {
 	/*
 	 * Skip FocusOut events that cause confusion.
-	 * NotifyPointer - the pointer is in us or a child, and we are loosing
+	 * NotifyPointer - the pointer is in us or a child, and we are losing
 	 *	focus because of an XSetInputFocus.  Other focus events
 	 *	will set our state properly.
 	 * NotifyPointerRoot - should never happen because this is sent
@@ -357,33 +406,34 @@ TkFocusFilterEvent(winPtr, eventPtr)
      * whereas in Tk 4.2 there was always a nop marker generated.
      */
 
-    delta = eventPtr->xfocus.serial - winPtr->mainPtr->focusSerial;
+    delta = eventPtr->xfocus.serial - displayFocusPtr->focusSerial;
     if (delta < 0) {
 	return retValue;
     }
 
     /*
-     * Find the FocusInfo structure for the window, and make a new one
+     * Find the ToplevelFocusInfo structure for the window, and make a new one
      * if there isn't one already.
      */
 
-    for (focusPtr = winPtr->mainPtr->focusPtr; focusPtr != NULL;
-	    focusPtr = focusPtr->nextPtr) {
-	if (focusPtr->topLevelPtr == winPtr) {
+    for (tlFocusPtr = winPtr->mainPtr->tlFocusPtr; tlFocusPtr != NULL;
+	    tlFocusPtr = tlFocusPtr->nextPtr) {
+	if (tlFocusPtr->topLevelPtr == winPtr) {
 	    break;
 	}
     }
-    if (focusPtr == NULL) {
-	focusPtr = (FocusInfo *) ckalloc(sizeof(FocusInfo));
-	focusPtr->topLevelPtr = focusPtr->focusWinPtr = winPtr;
-	focusPtr->nextPtr = winPtr->mainPtr->focusPtr;
-	winPtr->mainPtr->focusPtr = focusPtr;
+    if (tlFocusPtr == NULL) {
+	tlFocusPtr = (ToplevelFocusInfo *) ckalloc(sizeof(ToplevelFocusInfo));
+	tlFocusPtr->topLevelPtr = tlFocusPtr->focusWinPtr = winPtr;
+	tlFocusPtr->nextPtr = winPtr->mainPtr->tlFocusPtr;
+	winPtr->mainPtr->tlFocusPtr = tlFocusPtr;
     }
-    newFocusPtr = focusPtr->focusWinPtr;
+    newFocusPtr = tlFocusPtr->focusWinPtr;
 
     if (eventPtr->type == FocusIn) {
-	GenerateFocusEvents(winPtr->mainPtr->focusWinPtr, newFocusPtr);
-	winPtr->mainPtr->focusWinPtr = newFocusPtr;
+	GenerateFocusEvents(displayFocusPtr->focusWinPtr, newFocusPtr);
+	displayFocusPtr->focusWinPtr = newFocusPtr;
+	dispPtr->focusPtr = newFocusPtr;
 
 	/*
 	 * NotifyPointer gets set when the focus has been set to the root window
@@ -391,14 +441,26 @@ TkFocusFilterEvent(winPtr, eventPtr)
 	 * focus in event so that upon Leave events we release focus.
 	 */
 
-	if (eventPtr->xfocus.detail == NotifyPointer) {
-	    dispPtr->implicitWinPtr = winPtr;
-	} else {
-	    dispPtr->implicitWinPtr = NULL;
+	if (!(winPtr->flags & TK_EMBEDDED)) {
+	    if (eventPtr->xfocus.detail == NotifyPointer) {
+		dispPtr->implicitWinPtr = winPtr;
+	    } else {
+		dispPtr->implicitWinPtr = NULL;
+	    }
 	}
     } else if (eventPtr->type == FocusOut) {
-	GenerateFocusEvents(winPtr->mainPtr->focusWinPtr, (TkWindow *) NULL);
-	winPtr->mainPtr->focusWinPtr = NULL;
+	GenerateFocusEvents(displayFocusPtr->focusWinPtr, (TkWindow *) NULL);
+
+	/*
+	 * Reset dispPtr->focusPtr, but only if it currently is the same
+	 * as this application's focusWinPtr: this check is needed to
+	 * handle embedded applications in the same process.
+	 */
+
+	if (dispPtr->focusPtr == displayFocusPtr->focusWinPtr) {
+	    dispPtr->focusPtr = NULL;
+	}
+	displayFocusPtr->focusWinPtr = NULL;
     } else if (eventPtr->type == EnterNotify) {
 	/*
 	 * If there is no window manager, or if the window manager isn't
@@ -415,16 +477,17 @@ TkFocusFilterEvent(winPtr, eventPtr)
 	 */
 
 	if (eventPtr->xcrossing.focus &&
-                (winPtr->mainPtr->focusWinPtr == NULL)
+                (displayFocusPtr->focusWinPtr == NULL)
 		&& !(winPtr->flags & TK_EMBEDDED)) {
 	    if (tclFocusDebug) {
 		printf("Focussed implicitly on %s\n",
 			newFocusPtr->pathName);
 	    }
 
-	    GenerateFocusEvents(winPtr->mainPtr->focusWinPtr, newFocusPtr);
-	    winPtr->mainPtr->focusWinPtr = newFocusPtr;
+	    GenerateFocusEvents(displayFocusPtr->focusWinPtr, newFocusPtr);
+	    displayFocusPtr->focusWinPtr = newFocusPtr;
 	    dispPtr->implicitWinPtr = winPtr;
+	    dispPtr->focusPtr = newFocusPtr;
 	}
     } else if (eventPtr->type == LeaveNotify) {
 	/*
@@ -432,21 +495,23 @@ TkFocusFilterEvent(winPtr, eventPtr)
 	 * claimed the focus on enter, move the focus back to the root
 	 * window, where it was before we claimed it above.  Note:
 	 * dispPtr->implicitWinPtr may not be the same as
-	 * winPtr->mainPtr->focusWinPtr (e.g. because the "focus"
+	 * displayFocusPtr->focusWinPtr (e.g. because the "focus"
 	 * command was used to redirect the focus after it arrived at
 	 * dispPtr->implicitWinPtr)!!  In addition, we generate events
 	 * because the window manager won't give us a FocusOut event when
 	 * we focus on the root. 
 	 */
 
-	if (dispPtr->implicitWinPtr != NULL) {
+	if ((dispPtr->implicitWinPtr != NULL)
+		&& !(winPtr->flags & TK_EMBEDDED)) {
 	    if (tclFocusDebug) {
 		printf("Defocussed implicit Async\n");
 	    }
-	    GenerateFocusEvents(winPtr->mainPtr->focusWinPtr, (TkWindow *) NULL);
+	    GenerateFocusEvents(displayFocusPtr->focusWinPtr,
+		    (TkWindow *) NULL);
 	    XSetInputFocus(dispPtr->display, PointerRoot, RevertToPointerRoot,
 		    CurrentTime);
-	    winPtr->mainPtr->focusWinPtr = NULL;
+	    displayFocusPtr->focusWinPtr = NULL;
 	    dispPtr->implicitWinPtr = NULL;
 	}
     }
@@ -479,11 +544,13 @@ SetFocus(winPtr, force)
 				 * window even if the application doesn't
 				 * currently have the X focus. */
 {
-    FocusInfo *focusPtr;
+    ToplevelFocusInfo *tlFocusPtr;
+    DisplayFocusInfo *displayFocusPtr;
     TkWindow *topLevelPtr;
-    int allMapped;
+    int allMapped, serial;
 
-    if (winPtr == winPtr->mainPtr->focusWinPtr) {
+    displayFocusPtr = FindDisplayFocusInfo(winPtr->mainPtr, winPtr->dispPtr);
+    if (winPtr == displayFocusPtr->focusWinPtr) {
 	return;
     }
 
@@ -518,42 +585,42 @@ SetFocus(winPtr, force)
      * around;  it's no longer relevant.
      */
 
-    if (winPtr->mainPtr->focusOnMapPtr != NULL) {
+    if (displayFocusPtr->focusOnMapPtr != NULL) {
 	Tk_DeleteEventHandler(
-		(Tk_Window) winPtr->mainPtr->focusOnMapPtr,
+		(Tk_Window) displayFocusPtr->focusOnMapPtr,
 		StructureNotifyMask, FocusMapProc,
-		(ClientData) winPtr->mainPtr->focusOnMapPtr);
-	winPtr->mainPtr->focusOnMapPtr = NULL;
+		(ClientData) displayFocusPtr->focusOnMapPtr);
+	displayFocusPtr->focusOnMapPtr = NULL;
     }
     if (!allMapped) {
 	Tk_CreateEventHandler((Tk_Window) winPtr,
 		VisibilityChangeMask, FocusMapProc,
 		(ClientData) winPtr);
-	winPtr->mainPtr->focusOnMapPtr = winPtr;
-	winPtr->mainPtr->forceFocus = force;
+	displayFocusPtr->focusOnMapPtr = winPtr;
+	displayFocusPtr->forceFocus = force;
 	return;
     }
 
-    for (focusPtr = winPtr->mainPtr->focusPtr; focusPtr != NULL;
-	    focusPtr = focusPtr->nextPtr) {
-	if (focusPtr->topLevelPtr == topLevelPtr) {
+    for (tlFocusPtr = winPtr->mainPtr->tlFocusPtr; tlFocusPtr != NULL;
+	    tlFocusPtr = tlFocusPtr->nextPtr) {
+	if (tlFocusPtr->topLevelPtr == topLevelPtr) {
 	    break;
 	}
     }
-    if (focusPtr == NULL) {
-	focusPtr = (FocusInfo *) ckalloc(sizeof(FocusInfo));
-	focusPtr->topLevelPtr = topLevelPtr;
-	focusPtr->nextPtr = winPtr->mainPtr->focusPtr;
-	winPtr->mainPtr->focusPtr = focusPtr;
+    if (tlFocusPtr == NULL) {
+	tlFocusPtr = (ToplevelFocusInfo *) ckalloc(sizeof(ToplevelFocusInfo));
+	tlFocusPtr->topLevelPtr = topLevelPtr;
+	tlFocusPtr->nextPtr = winPtr->mainPtr->tlFocusPtr;
+	winPtr->mainPtr->tlFocusPtr = tlFocusPtr;
     }
-    focusPtr->focusWinPtr = winPtr;
+    tlFocusPtr->focusWinPtr = winPtr;
 
     /*
      * Reset the window system's focus window and generate focus events,
      * with two special cases:
      *
      * 1. If the application is embedded and doesn't currently have the
-     *    focus.  Don't set the focus directly.  Instead, see if the
+     *    focus, don't set the focus directly.  Instead, see if the
      *    embedding code can claim the focus from the enclosing
      *    container.
      * 2. Otherwise, if the application doesn't currently have the
@@ -562,9 +629,9 @@ SetFocus(winPtr, force)
      */
 
     if ((topLevelPtr->flags & TK_EMBEDDED)
-	    && (winPtr->mainPtr->focusWinPtr == NULL)) {
+	    && (displayFocusPtr->focusWinPtr == NULL)) {
 	TkpClaimFocus(topLevelPtr, force);
-    } else if ((winPtr->mainPtr->focusWinPtr != NULL) || force) {
+    } else if ((displayFocusPtr->focusWinPtr != NULL) || force) {
 	/*
 	 * Generate events to shift focus between Tk windows.
 	 * We do this regardless of what TkpChangeFocus does with
@@ -574,16 +641,20 @@ SetFocus(winPtr, force)
 	 * that are triggered by the ChangeFocus.
 	 */
 
-	TkpChangeFocus(TkpGetWrapperWindow(topLevelPtr), force);
-	GenerateFocusEvents(winPtr->mainPtr->focusWinPtr, winPtr);
-	winPtr->mainPtr->focusWinPtr = winPtr;
+	serial = TkpChangeFocus(TkpGetWrapperWindow(topLevelPtr), force);
+	if (serial != 0) {
+	    displayFocusPtr->focusSerial = serial;
+	}
+	GenerateFocusEvents(displayFocusPtr->focusWinPtr, winPtr);
+	displayFocusPtr->focusWinPtr = winPtr;
+	winPtr->dispPtr->focusPtr = winPtr;
     }
 }
 
 /*
  *----------------------------------------------------------------------
  *
- * GetFocus --
+ * TkGetFocusWin --
  *
  *	Given a window, this procedure returns the current focus
  *	window for its application and display.
@@ -599,18 +670,19 @@ SetFocus(winPtr, force)
  *----------------------------------------------------------------------
  */
 
-static TkWindow *
-GetFocus(winPtr)
+TkWindow *
+TkGetFocusWin(winPtr)
     TkWindow *winPtr;		/* Window that selects an application
 				 * and a display. */
 {
-    TkWindow *focusWinPtr;
+    DisplayFocusInfo *displayFocusPtr;
 
-    focusWinPtr = winPtr->mainPtr->focusWinPtr;
-    if ((focusWinPtr != NULL) && (focusWinPtr->mainPtr == winPtr->mainPtr)) {
-	return focusWinPtr;
+    if (winPtr == NULL) {
+	return (TkWindow *) NULL;
     }
-    return (TkWindow *) NULL;
+
+    displayFocusPtr = FindDisplayFocusInfo(winPtr->mainPtr, winPtr->dispPtr);
+    return displayFocusPtr->focusWinPtr;
 }
 
 /*
@@ -642,10 +714,29 @@ TkFocusKeyEvent(winPtr, eventPtr)
     XEvent *eventPtr;		/* X event to redirect (should be KeyPress
 				 * or KeyRelease). */
 {
+    DisplayFocusInfo *displayFocusPtr;
     TkWindow *focusWinPtr;
     int focusX, focusY, vRootX, vRootY, vRootWidth, vRootHeight;
 
-    focusWinPtr = winPtr->mainPtr->focusWinPtr;
+    displayFocusPtr = FindDisplayFocusInfo(winPtr->mainPtr, winPtr->dispPtr);
+    focusWinPtr = displayFocusPtr->focusWinPtr;
+
+    /*
+     * The code below is a debugging aid to make sure that dispPtr->focusPtr
+     * is kept properly in sync with the "truth", which is the value in
+     * displayFocusPtr->focusWinPtr.
+     */
+
+#ifdef TCL_MEM_DEBUG
+    if (focusWinPtr != winPtr->dispPtr->focusPtr) {
+	printf("TkFocusKeyEvent found dispPtr->focusPtr out of sync:\n");
+	printf("expected %s, got %s\n",
+		(focusWinPtr != NULL) ? focusWinPtr->pathName : "??",
+		(winPtr->dispPtr->focusPtr != NULL) ?
+		winPtr->dispPtr->focusPtr->pathName : "??");
+    }
+#endif
+
     if ((focusWinPtr != NULL) && (focusWinPtr->mainPtr == winPtr->mainPtr)) {
 	/*
 	 * Map the x and y coordinates to make sense in the context of
@@ -701,7 +792,8 @@ TkFocusDeadWindow(winPtr)
     register TkWindow *winPtr;		/* Information about the window
 					 * that is being deleted. */
 {
-    FocusInfo *focusPtr, *prevPtr;
+    ToplevelFocusInfo *tlFocusPtr, *prevPtr;
+    DisplayFocusInfo *displayFocusPtr;
     TkDisplay *dispPtr = winPtr->dispPtr;
 
     /*
@@ -709,10 +801,11 @@ TkFocusDeadWindow(winPtr)
      * the top-level window or the current focus window.
      */
 
-    for (prevPtr = NULL, focusPtr = winPtr->mainPtr->focusPtr;
-	    focusPtr != NULL;
-	    prevPtr = focusPtr, focusPtr = focusPtr->nextPtr) {
-	if (winPtr == focusPtr->topLevelPtr) {
+    displayFocusPtr = FindDisplayFocusInfo(winPtr->mainPtr, winPtr->dispPtr);
+    for (prevPtr = NULL, tlFocusPtr = winPtr->mainPtr->tlFocusPtr;
+	    tlFocusPtr != NULL;
+	    prevPtr = tlFocusPtr, tlFocusPtr = tlFocusPtr->nextPtr) {
+	if (winPtr == tlFocusPtr->topLevelPtr) {
 	    /*
 	     * The top-level window is the one being deleted: free
 	     * the focus record and release the focus back to PointerRoot
@@ -722,44 +815,48 @@ TkFocusDeadWindow(winPtr)
 	    if (dispPtr->implicitWinPtr == winPtr) {
 		if (tclFocusDebug) {
 		    printf("releasing focus to root after %s died\n",
-			    focusPtr->topLevelPtr->pathName);
+			    tlFocusPtr->topLevelPtr->pathName);
 		}
 		dispPtr->implicitWinPtr = NULL;
-		winPtr->mainPtr->focusWinPtr = NULL;
+		displayFocusPtr->focusWinPtr = NULL;
+		dispPtr->focusPtr = NULL;
 	    }
-	    if (winPtr->mainPtr->focusWinPtr == focusPtr->focusWinPtr) {
-		winPtr->mainPtr->focusWinPtr = NULL;
+	    if (displayFocusPtr->focusWinPtr == tlFocusPtr->focusWinPtr) {
+		displayFocusPtr->focusWinPtr = NULL;
+		dispPtr->focusPtr = NULL;
 	    }
 	    if (prevPtr == NULL) {
-		winPtr->mainPtr->focusPtr = focusPtr->nextPtr;
+		winPtr->mainPtr->tlFocusPtr = tlFocusPtr->nextPtr;
 	    } else {
-		prevPtr->nextPtr = focusPtr->nextPtr;
+		prevPtr->nextPtr = tlFocusPtr->nextPtr;
 	    }
-	    ckfree((char *) focusPtr);
+	    ckfree((char *) tlFocusPtr);
 	    break;
-	} else if (winPtr == focusPtr->focusWinPtr) {
+	} else if (winPtr == tlFocusPtr->focusWinPtr) {
 	    /*
 	     * The deleted window had the focus for its top-level:
 	     * move the focus to the top-level itself.
 	     */
 
-	    focusPtr->focusWinPtr = focusPtr->topLevelPtr;
-	    if ((winPtr->mainPtr->focusWinPtr == winPtr)
-		    && !(focusPtr->topLevelPtr->flags & TK_ALREADY_DEAD)) {
+	    tlFocusPtr->focusWinPtr = tlFocusPtr->topLevelPtr;
+	    if ((displayFocusPtr->focusWinPtr == winPtr)
+		    && !(tlFocusPtr->topLevelPtr->flags & TK_ALREADY_DEAD)) {
 		if (tclFocusDebug) {
 		    printf("forwarding focus to %s after %s died\n",
-			    focusPtr->topLevelPtr->pathName, winPtr->pathName);
+			    tlFocusPtr->topLevelPtr->pathName,
+			    winPtr->pathName);
 		}
-		GenerateFocusEvents(winPtr->mainPtr->focusWinPtr,
-			focusPtr->topLevelPtr);
-		winPtr->mainPtr->focusWinPtr = focusPtr->topLevelPtr;
+		GenerateFocusEvents(displayFocusPtr->focusWinPtr,
+			tlFocusPtr->topLevelPtr);
+		displayFocusPtr->focusWinPtr = tlFocusPtr->topLevelPtr;
+		dispPtr->focusPtr = tlFocusPtr->topLevelPtr;
 	    }
 	    break;
 	}
     }
 
-    if (winPtr->mainPtr->focusOnMapPtr == winPtr) {
-	winPtr->mainPtr->focusOnMapPtr = NULL;
+    if (displayFocusPtr->focusOnMapPtr == winPtr) {
+	displayFocusPtr->focusOnMapPtr = NULL;
     }
 }
 
@@ -834,15 +931,68 @@ FocusMapProc(clientData, eventPtr)
     XEvent *eventPtr;		/* Information about event. */
 {
     TkWindow *winPtr = (TkWindow *) clientData;
+    DisplayFocusInfo *displayFocusPtr;
 
     if (eventPtr->type == VisibilityNotify) {
+	displayFocusPtr = FindDisplayFocusInfo(winPtr->mainPtr,
+		winPtr->dispPtr);
 	if (tclFocusDebug) {
 	    printf("auto-focussing on %s, force %d\n", winPtr->pathName,
-		    winPtr->mainPtr->forceFocus);
+		    displayFocusPtr->forceFocus);
 	}
 	Tk_DeleteEventHandler((Tk_Window) winPtr, VisibilityChangeMask,
 		FocusMapProc, clientData);
-	winPtr->mainPtr->focusOnMapPtr = NULL;
-	SetFocus(winPtr, winPtr->mainPtr->forceFocus);
+	displayFocusPtr->focusOnMapPtr = NULL;
+	SetFocus(winPtr, displayFocusPtr->forceFocus);
     }
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
+ * FindDisplayFocusInfo --
+ *
+ *	Given an application and a display, this procedure locate the
+ *	focus record for that combination.  If no such record exists,
+ *	it creates a new record and initializes it.
+ *
+ * Results:
+ *	The return value is a pointer to the record.
+ *
+ * Side effects:
+ *	A new record will be allocated if there wasn't one already.
+ *
+ *----------------------------------------------------------------------
+ */
+
+static DisplayFocusInfo *
+FindDisplayFocusInfo(mainPtr, dispPtr)
+    TkMainInfo *mainPtr;	/* Record that identifies a particular
+				 * application. */
+    TkDisplay *dispPtr;		/* Display whose focus information is
+				 * needed. */
+{
+    DisplayFocusInfo *displayFocusPtr;
+
+    for (displayFocusPtr = mainPtr->displayFocusPtr;
+	    displayFocusPtr != NULL;
+	    displayFocusPtr = displayFocusPtr->nextPtr) {
+	if (displayFocusPtr->dispPtr == dispPtr) {
+	    return displayFocusPtr;
+	}
+    }
+
+    /*
+     * The record doesn't exist yet.  Make a new one.
+     */
+
+    displayFocusPtr = (DisplayFocusInfo *) ckalloc(sizeof(DisplayFocusInfo));
+    displayFocusPtr->dispPtr = dispPtr;
+    displayFocusPtr->focusWinPtr = NULL;
+    displayFocusPtr->focusOnMapPtr = NULL;
+    displayFocusPtr->forceFocus = 0;
+    displayFocusPtr->focusSerial = 0;
+    displayFocusPtr->nextPtr = mainPtr->displayFocusPtr;
+    mainPtr->displayFocusPtr = displayFocusPtr;
+    return displayFocusPtr;
 }

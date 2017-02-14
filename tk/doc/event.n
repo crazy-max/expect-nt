@@ -4,7 +4,7 @@
 '\" See the file "license.terms" for information on usage and redistribution
 '\" of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 '\" 
-'\" SCCS: @(#) event.n 1.5 96/11/03 16:32:02
+'\" SCCS: @(#) event.n 1.6 97/10/31 12:58:54
 '\" 
 .so man.macros
 .TH event n 4.4 Tk "Tk Built-In Commands"
@@ -34,7 +34,7 @@ any of the values allowed for the \fIsequence\fR argument to the
 If \fIvirtual\fR is already defined, the new physical event sequences
 add to the existing sequences for the event.
 .TP
-\fBevent delete <<\fIvirtual\fB>> \fR?\fIsequence \fIsequence ...\fR?
+\fBevent delete <<\fIvirtual\fB>> \fR?\fIsequence\fR \fIsequence ...\fR?
 Deletes each of the \fIsequence\fRs from those associated with
 the virtual event given by \fIvirtual\fR.
 \fIVirtual\fR may be any string value and \fIsequence\fR may have

@@ -12,7 +12,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) MW_TclHeader.pch 1.24 97/07/30 16:44:37
+ * SCCS: @(#) MW_TclHeader.pch 1.27 97/11/20 18:45:25
  */
 
 /*
@@ -86,6 +86,17 @@
 #   define TCL_MEM_DEBUG
 #   define TCL_TEST
 #endif
+
+
+/*
+ * For a while, we will continue to use the old routine names, so that
+ * people with older versions of CodeWarrior will still be able to compile
+ * the source (albeit they will have to update the project files themselves).
+ *
+ * At some point, we will convert over to the new routine names.
+ */
+ 
+#define OLDROUTINENAMES 1
 
 /*
  * Place any includes below that will are needed by the majority of the

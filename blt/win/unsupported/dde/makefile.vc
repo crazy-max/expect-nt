@@ -1,0 +1,22 @@
+ROOT=.
+THIS=dde
+DLL_VER=11
+OBJDIR=objs
+BLTWISH=xy
+
+!include $(ROOT)\mkfiles\makefile.ini
+
+DLL_OBJS=	$(OBJDIR)\dde.obj
+
+DLL_LIBS=$(TKLIB) $(TCLLIB)
+DEFINES=$(TK_DEFINES)
+INCLUDES=-I. -I..\ansi_qp\include -I$(ROOT)\..\..\tcl8.0\generic -I$(ROOT)\..\..\tk8.0\generic -I$(ROOT)\..\..\tk8.0\xlib $(TCL_INCLUDES) $(TK_INCLUDES)
+
+!include $(ROOT)\mkfiles\makefile.mof
+!include $(ROOT)\mkfiles\makefile.mdl
+
+#dependancies
+$(OBJDIR)\dde.obj:		dde.c
+
+
+!include $(ROOT)\mkfiles\makefile.cln

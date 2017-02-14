@@ -4,12 +4,12 @@
  *	This file implements window items for canvas widgets.
  *
  * Copyright (c) 1992-1994 The Regents of the University of California.
- * Copyright (c) 1994-1995 Sun Microsystems, Inc.
+ * Copyright (c) 1994-1997 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkCanvWind.c 1.28 97/06/16 15:31:39
+ * SCCS: @(#) tkCanvWind.c 1.29 97/10/14 10:40:54
  */
 
 #include <stdio.h>
@@ -549,6 +549,23 @@ DisplayWinItem(canvas, itemPtr, display, drawable, regionX, regionY,
 	    (double) winItemPtr->header.y1, &x, &y);
     width = winItemPtr->header.x2 - winItemPtr->header.x1;
     height = winItemPtr->header.y2 - winItemPtr->header.y1;
+
+    /*
+     * If the window is completely out of the visible area of the canvas
+     * then unmap it.  This code used not to be present (why unmap the
+     * window if it isn't visible anyway?) but this could cause the
+     * window to suddenly reappear if the canvas window got resized.
+     */
+
+    if (((x + width) <= 0) || ((y + height) <= 0)
+	    || (x >= Tk_Width(canvasTkwin)) || (y >= Tk_Height(canvasTkwin))) {
+	if (canvasTkwin == Tk_Parent(winItemPtr->tkwin)) {
+	    Tk_UnmapWindow(winItemPtr->tkwin); 
+	} else {
+	    Tk_UnmaintainGeometry(winItemPtr->tkwin, canvasTkwin);
+	}
+	return;
+    }
 
     /*
      * Reposition and map the window (but in different ways depending

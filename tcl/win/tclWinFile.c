@@ -11,7 +11,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclWinFile.c 1.44 97/08/05 11:45:34
+ * SCCS: @(#) tclWinFile.c 1.45 97/10/29 19:08:35
  */
 
 #include "tclWinInt.h"
@@ -105,6 +105,7 @@ TclMatchFiles(interp, separators, dirPtr, pattern, tail)
 {
     char drivePattern[4] = "?:\\";
     char *newPattern, *p, *dir, *root, c;
+    char *src, *dest;
     int length, matchDotFiles;
     int result = TCL_OK;
     int baseLength = Tcl_DStringLength(dirPtr);
@@ -199,22 +200,17 @@ TclMatchFiles(interp, separators, dirPtr, pattern, tail)
     }
     
     /*
-     * If the volume is not case sensitive, then we need to convert the pattern
-     * to lower case.
+     * In Windows, although some volumes may support case sensitivity, Windows
+     * doesn't honor case.  So in globbing we need to ignore the case
+     * of file names.
      */
 
     length = tail - pattern;
     newPattern = ckalloc(length+1);
-    if (volFlags & FS_CASE_SENSITIVE) {
-	strncpy(newPattern, pattern, length);
-	newPattern[length] = '\0';
-    } else {
-	char *src, *dest;
-	for (src = pattern, dest = newPattern; src < tail; src++, dest++) {
-	    *dest = (char) tolower(*src);
-	}
-	*dest = '\0';
+    for (src = pattern, dest = newPattern; src < tail; src++, dest++) {
+	*dest = (char) tolower(*src);
     }
+    *dest = '\0';
     
     /*
      * We need to check all files in the directory, so append a *.*
@@ -282,30 +278,26 @@ TclMatchFiles(interp, separators, dirPtr, pattern, tail)
 	}
 
 	/*
-	 * Check to see if the file matches the pattern.  If the volume is not
-	 * case sensitive, we need to convert the file name to lower case.  If
-	 * the volume also doesn't preserve case, then we return the lower case
-	 * form of the name, otherwise we return the system form.
- 	 */
+	 * Check to see if the file matches the pattern.  We need to convert
+	 * the file name to lower case for comparison purposes.  Note that we
+	 * are ignoring the case sensitivity flag because Windows doesn't honor
+	 * case even if the volume is case sensitive.  If the volume also
+	 * doesn't preserve case, then we return the lower case form of the
+	 * name, otherwise we return the system form.
+	 */
 
 	matchResult = NULL;
-	if (!(volFlags & FS_CASE_SENSITIVE)) {
-	    Tcl_DStringSetLength(&buffer, 0);
-	    Tcl_DStringAppend(&buffer, data.cFileName, -1);
-	    for (p = buffer.string; *p != '\0'; p++) {
-		*p = (char) tolower(*p);
-	    }
-	    if (Tcl_StringMatch(buffer.string, newPattern)) {
-		if (volFlags & FS_CASE_IS_PRESERVED) {
-		    matchResult = data.cFileName;
-		} else {
-		    matchResult = buffer.string;
-		}	
-	    }
-	} else {
-	    if (Tcl_StringMatch(data.cFileName, newPattern)) {
+	Tcl_DStringSetLength(&buffer, 0);
+	Tcl_DStringAppend(&buffer, data.cFileName, -1);
+	for (p = buffer.string; *p != '\0'; p++) {
+	    *p = (char) tolower(*p);
+	}
+	if (Tcl_StringMatch(buffer.string, newPattern)) {
+	    if (volFlags & FS_CASE_IS_PRESERVED) {
 		matchResult = data.cFileName;
-	    }
+	    } else {
+		matchResult = buffer.string;
+	    }	
 	}
 
 	if (matchResult == NULL) {

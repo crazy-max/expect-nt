@@ -1,0 +1,20 @@
+.rc{$(OBJDIR)}.res:
+	$(rc) /r /Fo$@ $<
+
+.c{$(OBJDIR)}.obj:
+    $(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) \
+          $(DEFINES) -Fo$(OBJDIR)\ $<
+
+.c.obj:
+    $(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) \
+          $(DEFINES) -Fo$(OBJDIR)\ $<
+
+.c{$(OBJDIR)}.i:
+    $(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) \
+          $(DEFINES) -E $< > $@
+
+!IFDEF ASRCD
+{$(ASRCD)}.c{$(OBJDIR)}.obj:
+    $(cc) $(cdebug) $(cflags) $(cvarsdll) $(INCLUDES) \
+          $(DEFINES) -Fo$(OBJDIR)\ $<
+!ENDIF

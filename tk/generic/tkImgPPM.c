@@ -13,7 +13,7 @@
  *	   Department of Computer Science,
  *	   Australian National University.
  *
- * SCCS: @(#) tkImgPPM.c 1.15 97/02/05 13:01:20
+ * SCCS: @(#) tkImgPPM.c 1.16 97/10/28 14:51:46
  */
 
 #include "tkInt.h"
@@ -346,16 +346,14 @@ ReadPPMFileHeader(chan, widthPtr, heightPtr, maxIntensityPtr)
     int i, numFields, firstInLine;
     int type = 0;
     char c;
-    int eof = 0;
 
     /*
      * Read 4 space-separated fields from the file, ignoring
      * comments (any line that starts with "#").
      */
 
-    Tcl_Read(chan, &c, 1);
-    if (Tcl_Eof(chan)) {
-	eof = 1;
+    if (Tcl_Read(chan, &c, 1) != 1) {
+	return 0;
     }
     firstInLine = 1;
     i = 0;
@@ -367,20 +365,18 @@ ReadPPMFileHeader(chan, widthPtr, heightPtr, maxIntensityPtr)
 	while (1) {
 	    while (isspace(UCHAR(c))) {
 		firstInLine = (c == '\n');
-		Tcl_Read(chan, &c, 1);
-		if (Tcl_Eof(chan)) {
-		    eof = 1;
+		if (Tcl_Read(chan, &c, 1) != 1) {
+		    return 0;
 		}
 	    }
 	    if (c != '#') {
 		break;
 	    }
 	    do {
-		Tcl_Read(chan, &c, 1);
-		if (Tcl_Eof(chan)) {
-		    eof = 1;
+		if (Tcl_Read(chan, &c, 1) != 1) {
+		    return 0;
 		}
-	    } while ((eof != 1) && (c != '\n'));
+	    } while (c != '\n');
 	    firstInLine = 1;
 	}
 
@@ -388,14 +384,13 @@ ReadPPMFileHeader(chan, widthPtr, heightPtr, maxIntensityPtr)
 	 * Read a field (everything up to the next white space).
 	 */
 
-	while ((eof != 1) && !isspace(UCHAR(c))) {
+	while (!isspace(UCHAR(c))) {
 	    if (i < (BUFFER_SIZE-2)) {
 		buffer[i] = c;
 		i++;
 	    }
-	    Tcl_Read(chan, &c, 1);
-	    if (Tcl_Eof(chan)) {
-		eof = 1;
+	    if (Tcl_Read(chan, &c, 1) != 1) {
+		goto done;
 	    }
 	}
 	if (i < (BUFFER_SIZE-1)) {
@@ -404,6 +399,7 @@ ReadPPMFileHeader(chan, widthPtr, heightPtr, maxIntensityPtr)
 	}
 	firstInLine = 0;
     }
+    done:
     buffer[i] = 0;
 
     /*

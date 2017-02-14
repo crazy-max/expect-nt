@@ -9,7 +9,7 @@
 '\"	    Department of Computer Science,
 '\"	    Australian National University.
 '\"
-'\" SCCS: @(#) CrtPhImgFmt.3 1.9 97/02/05 13:16:09
+'\" SCCS: @(#) CrtPhImgFmt.3 1.10 97/10/31 12:58:54
 '\"
 .so man.macros
 .TH Tk_CreatePhotoImageFormat 3 4.0 Tk "Tk Library Procedures"
@@ -132,9 +132,9 @@ typedef int Tk_ImageFileReadProc(
 	char *\fIfileName\fR,
 	char *\fIformatString\fR,
 	PhotoHandle \fIimageHandle\fR,
-	int \fIdestX, int \fIdestY\fR,
-	int \fIwidth, int \fIheight\fR,
-	int \fIsrcX, int \fIsrcY\fR);
+	int \fIdestX\fR, int \fIdestY\fR,
+	int \fIwidth\fR, int \fIheight\fR,
+	int \fIsrcX\fR, int \fIsrcY\fR);
 .CE
 The \fIinterp\fR argument is the interpreter in which the command was
 invoked to read the image; it should be used for reporting errors.
@@ -160,9 +160,9 @@ typedef int Tk_ImageStringReadProc(
 	char *\fIstring\fR,
 	char *\fIformatString\fR,
 	PhotoHandle \fIimageHandle\fR,
-	int \fIdestX, int \fIdestY\fR,
-	int \fIwidth, int \fIheight\fR,
-	int \fIsrcX, int \fIsrcY\fR);
+	int \fIdestX\fR, int \fIdestY\fR,
+	int \fIwidth\fR, int \fIheight\fR,
+	int \fIsrcX\fR, int \fIsrcY\fR);
 .CE
 The \fIinterp\fR argument is the interpreter in which the command was
 invoked to read the image; it should be used for reporting errors.

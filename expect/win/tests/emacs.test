@@ -9,7 +9,7 @@
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 #
-# RCS: $Header: /disk/3/CVSROOT/Mitel/expect/win/tests/emacs.test,v 1.1 1997/09/10 09:00:00 chaffee Exp $
+# RCS: $Header: /disk/3/CVSROOT/Mitel/expect/win/tests/emacs.test,v 1.2 1998/08/28 23:14:32 chaffee Exp $
 
 if {[string compare test [info procs test]] == 1} then {source defs}
 
@@ -17,6 +17,7 @@ catch {unset a}
 catch {unset x}
 
 test emacs-1.1 {emacs tests} {
+    set ok 1
     if [catch {
 	spawn emacs -nw
 
@@ -45,14 +46,16 @@ test emacs-1.1 {emacs tests} {
 	# C-x C-c
 	send "\030\003"
 
-	close
-	wait
-    } msg] {set msg} else {set ok 1}
+    } msg] {} else {set msg $ok}
+    catch {close}
+    catch {wait}
+    set msg
 } {1}
 
 # exp_internal -f dbg.log 1
 
 test emacs-1.2 {emacs tests} {
+    set ok 1
     if [catch {
 	spawn emacs -nw
 	send "\021"; send -null
@@ -73,9 +76,40 @@ test emacs-1.2 {emacs tests} {
 	    eof {error "unexpected eof: did not see ^K^L^M^N^O^P^Q^R^S^T^U^V^W^X^Y^Z"}
 	    timeout {error "unexpected timeout: did not see ^K^L^M^N^O^P^Q^R^S^T^U^V^W^X^Y^Z"}
 	}
+    } msg] {} else {set msg $ok}
+    catch {close}
+    catch {wait}
+    set msg
+} {1}
+
+test emacs-1.3 {emacs tests} {
+    set ok 1
+    if [catch {
+	spawn -socket emacs -nw
+	send "\021"; send -null
+
+	for {set i 1} {$i <= 26} {incr i} {
+	    set s [format "%03o" $i]
+	    send "\021$s"
+	}
+
+	expect {
+	    {\^@\^A\^B\^C\^D\^E\^F\^G\^H} {}
+	    eof {error "unexpected timeout: did not see ^@^A^B^C^D^E^F^G^H"}
+	    timeout {set saw [expect *]; error "unexpected eof: did not see ^@^A^B^C^D^E^F^G^H but saw $saw"}
+	}
+
+	expect {
+	    {\^K\^L\^M\^N\^O\^P\^Q\^R\^S\^T\^U\^V\^W\^X\^Y\^Z} {}
+	    eof {error "unexpected eof: did not see ^K^L^M^N^O^P^Q^R^S^T^U^V^W^X^Y^Z"}
+	    timeout {error "unexpected timeout: did not see ^K^L^M^N^O^P^Q^R^S^T^U^V^W^X^Y^Z"}
+	}
 	close
 	wait
-    } msg] {set msg} else {set ok 1}
+    } msg] {} else {set msg $ok}
+    catch {close}
+    catch {wait}
+    set msg
 } {1}
 
 # Emacs seems to mess up our echo

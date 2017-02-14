@@ -317,6 +317,9 @@ main(int argc, char **argv)
 {
     int i;
 
+    /* Call this with 1 to turn on verbose debugging info */
+    exp_setdebug(NULL, 1);
+
     for (i = 0; i < 100; i++) {
 	printf("-------------------- Iteration %d ------------------------\n", i);
 	result(1, test1());

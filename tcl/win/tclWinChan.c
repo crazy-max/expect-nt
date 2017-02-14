@@ -9,7 +9,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclWinChan.c 1.74 97/06/20 13:06:00
+ * SCCS: @(#) tclWinChan.c 1.75 97/09/26 16:17:46
  */
 
 #include "tclWinInt.h"
@@ -340,7 +340,7 @@ FileSetupProc(data, flags)
      */
 
     for (infoPtr = firstFilePtr; infoPtr != NULL; infoPtr = infoPtr->nextPtr) {
-	if (infoPtr->validMask & TCL_READABLE) {
+	if (infoPtr->watchMask & TCL_READABLE) {
 	    if (infoPtr->readerInfo->rType == FILE_TYPE_CONSOLE) {
 		if (infoPtr->readerInfo->rThread == NULL) {
 		    TclWinReaderStart(infoPtr->readerInfo, TclWinReaderThread);
@@ -397,7 +397,7 @@ FileCheckProc(data, flags)
      */
 
     for (infoPtr = firstFilePtr; infoPtr != NULL; infoPtr = infoPtr->nextPtr) {
-	if (infoPtr->validMask & TCL_READABLE) {
+	if (infoPtr->watchMask & TCL_READABLE) {
 	    if (infoPtr->readerInfo->rThread == NULL) {
 		if (infoPtr->readerInfo->rType == FILE_TYPE_CONSOLE) {
 		    TclWinReaderStart(infoPtr->readerInfo, TclWinReaderThread);
@@ -1269,38 +1269,42 @@ Tcl_OpenFileChannel(interp, fileName, modeString, permissions)
     }
 
     dcb.DCBlength = sizeof( DCB ) ;
-    if (GetCommState(handle, &dcb)) {
-	/*
-	 * This is a com port.  Reopen it with the correct modes. 
-	 */
+    if (GetFileType(handle) == FILE_TYPE_CHAR) {
+	if (GetCommState(handle, &dcb)) {
+	    /*
+	     * This is a com port.  Reopen it with the correct modes. 
+	     */
 
-	COMMTIMEOUTS cto;
+	    COMMTIMEOUTS cto;
 
-	CloseHandle(handle);
-	handle = CreateFile(nativeName, accessMode, 0, NULL, OPEN_EXISTING,
-			flags | FILE_FLAG_OVERLAPPED, NULL);
-	if (handle == INVALID_HANDLE_VALUE) {
-	    goto openerr;
+	    CloseHandle(handle);
+	    handle = CreateFile(nativeName, accessMode, 0, NULL, OPEN_EXISTING,
+		    flags | FILE_FLAG_OVERLAPPED, NULL);
+	    if (handle == INVALID_HANDLE_VALUE) {
+		goto openerr;
+	    }
+
+	    /*
+	     * FileInit the com port.
+	     */
+
+	    SetCommMask(handle, EV_RXCHAR);
+	    SetupComm(handle, 4096, 4096);
+	    PurgeComm(handle, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR
+		    | PURGE_RXCLEAR);
+	    cto.ReadIntervalTimeout = MAXDWORD;
+	    cto.ReadTotalTimeoutMultiplier = 0;
+	    cto.ReadTotalTimeoutConstant = 0;
+	    cto.WriteTotalTimeoutMultiplier = 0;
+	    cto.WriteTotalTimeoutConstant = 0;
+	    SetCommTimeouts(handle, &cto);
+
+	    GetCommState(handle, &dcb);
+	    SetCommState(handle, &dcb);
+	    channelTypePtr = &comChannelType;
+	} else {
+	    channelTypePtr = &fileChannelType;
 	}
-
-	/*
-	 * FileInit the com port.
-	 */
-
-	SetCommMask(handle, EV_RXCHAR);
-	SetupComm(handle, 4096, 4096);
-	PurgeComm(handle, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR
-		| PURGE_RXCLEAR);
-	cto.ReadIntervalTimeout = MAXDWORD;
-	cto.ReadTotalTimeoutMultiplier = 0;
-	cto.ReadTotalTimeoutConstant = 0;
-        cto.WriteTotalTimeoutMultiplier = 0;
-	cto.WriteTotalTimeoutConstant = 0;
-	SetCommTimeouts(handle, &cto);
-
-	GetCommState(handle, &dcb);
-	SetCommState(handle, &dcb);
-	channelTypePtr = &comChannelType;
     } else {
 	channelTypePtr = &fileChannelType;
     }

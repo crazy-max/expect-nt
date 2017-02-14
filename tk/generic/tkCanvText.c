@@ -9,13 +9,14 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkCanvText.c 1.67 97/06/17 17:46:45
+ * SCCS: @(#) tkCanvText.c 1.68 97/10/09 17:44:53
  */
 
 #include <stdio.h>
 #include "tkInt.h"
 #include "tkCanvas.h"
 #include "tkPort.h"
+#include "default.h"
 
 /*
  * The structure below defines the record for each text item.
@@ -87,7 +88,7 @@ static Tk_ConfigSpec configSpecs[] = {
     {TK_CONFIG_COLOR, "-fill", (char *) NULL, (char *) NULL,
 	"black", Tk_Offset(TextItem, color), 0},
     {TK_CONFIG_FONT, "-font", (char *) NULL, (char *) NULL,
-	"Helvetica 12 bold", Tk_Offset(TextItem, tkfont), 0},
+	DEF_CANVTEXT_FONT, Tk_Offset(TextItem, tkfont), 0},
     {TK_CONFIG_JUSTIFY, "-justify", (char *) NULL, (char *) NULL,
 	"left", Tk_Offset(TextItem, justify),
 	TK_CONFIG_DONT_SET_DEFAULT},

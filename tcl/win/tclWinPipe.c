@@ -9,7 +9,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclWinPipe.c 1.44 97/08/05 11:46:12
+ * SCCS: @(#) tclWinPipe.c 1.49 97/11/06 17:33:03
  */
 
 #include "tclWinInt.h"
@@ -207,6 +207,7 @@ static void	PipeWatchProc(ClientData instanceData, int mask);
 static int	PipeSetOptionProc (ClientData instanceData, Tcl_Interp *interp,
 		    char *optionName, char *value);
 static void	PipeSetupProc(ClientData clientData, int flags);
+static int	TempFileName(char name[MAX_PATH]);
 
 /*
  * This structure describes the channel type structure for command pipe
@@ -397,14 +398,17 @@ PipeSetupProc(data, flags)
      */
 
     for (infoPtr = firstPipePtr; infoPtr != NULL; infoPtr = infoPtr->nextPtr) {
-	if (infoPtr->readerInfo->rType != FILE_TYPE_DISK) {
+	if ((infoPtr->watchMask & TCL_READABLE) &&
+	    (infoPtr->readerInfo->rType != FILE_TYPE_DISK))
+	{
 	    if (infoPtr->readerInfo->rThread == NULL) {
 		TclWinReaderStart(infoPtr->readerInfo, TclWinReaderThread);
 	    }
 	}
-	if ((infoPtr->readerInfo->readyMask & infoPtr->watchMask)
-	    && ((infoPtr->readerInfo->rDataLen > infoPtr->readerInfo->rDataPos)
-		|| infoPtr->readerInfo->eof))
+	if ((infoPtr->watchMask & TCL_WRITABLE) ||
+	    ((infoPtr->readerInfo->readyMask & infoPtr->watchMask)
+	     && ((infoPtr->readerInfo->rDataLen > infoPtr->readerInfo->rDataPos)
+		 || infoPtr->readerInfo->eof)))
 	{
 	    Tcl_SetMaxBlockTime(&blockTime);
 	    break;
@@ -447,15 +451,18 @@ PipeCheckProc(data, flags)
      */
 
     for (infoPtr = firstPipePtr; infoPtr != NULL; infoPtr = infoPtr->nextPtr) {
-	if (infoPtr->readerInfo->rType != FILE_TYPE_DISK) {
+	if ((infoPtr->watchMask & TCL_READABLE) &&
+	    (infoPtr->readerInfo->rType != FILE_TYPE_DISK))
+	{
 	    if (infoPtr->readerInfo->rThread == NULL) {
 		TclWinReaderStart(infoPtr->readerInfo, TclWinReaderThread);
 	    }
 	}
-	if ((infoPtr->readerInfo->readyMask & infoPtr->watchMask)
-	    && (infoPtr->readerInfo->eof ||
-		((infoPtr->readerInfo->rDataLen > infoPtr->readerInfo->rDataPos)
-		 && !(infoPtr->flags & PIPE_PENDING))))
+	if ((infoPtr->watchMask & TCL_WRITABLE) ||
+	    (((infoPtr->readerInfo->readyMask) & infoPtr->watchMask)
+	     && (infoPtr->readerInfo->eof ||
+		 ((infoPtr->readerInfo->rDataLen > infoPtr->readerInfo->rDataPos)
+		  && !(infoPtr->flags & PIPE_PENDING)))))
 	{
 	    infoPtr->flags |= PIPE_PENDING;
 	    evPtr = (PipeEvent *) ckalloc(sizeof(PipeEvent));
@@ -552,6 +559,43 @@ TclpMakeFile(channel, direction)
 /*
  *----------------------------------------------------------------------
  *
+ * TempFileName --
+ *
+ *	Gets a temporary file name and deals with the fact that the
+ *	temporary file path provided by Windows may not actually exist
+ *	if the TMP or TEMP environment variables refer to a 
+ *	non-existent directory.
+ *
+ * Results:    
+ *	0 if error, non-zero otherwise.  If non-zero is returned, the
+ *	name buffer will be filled with a name that can be used to 
+ *	construct a temporary file.
+ *
+ * Side effects:
+ *	None.
+ *
+ *----------------------------------------------------------------------
+ */
+
+static int
+TempFileName(name)
+    char name[MAX_PATH];	/* Buffer in which name for temporary 
+				 * file gets stored. */
+{
+    if ((GetTempPath(MAX_PATH, name) == 0) ||
+	    (GetTempFileName(name, "TCL", 0, name) == 0)) {
+	name[0] = '.';
+	name[1] = '\0';
+	if (GetTempFileName(name, "TCL", 0, name) == 0) {
+	    return 0;
+	}
+    }
+    return 1;
+}
+
+/*
+ *----------------------------------------------------------------------
+ *
  * TclpCreateTempFile --
  *
  *	This function opens a unique file with the property that it
@@ -577,8 +621,7 @@ TclpCreateTempFile(contents, namePtr)
     char name[MAX_PATH];
     HANDLE handle;
 
-    if ((GetTempPath(MAX_PATH, name) == 0) ||
-	    (GetTempFileName(name, "TCL", 0, name) == 0)) {
+    if (TempFileName(name) == 0) {
 	return NULL;
     }
 
@@ -807,9 +850,7 @@ TclpCreatePipe(readPipe, writePipe)
 	WinPipe *readPipePtr, *writePipePtr;
 	char buf[MAX_PATH];
 
-	if ((GetTempPath(MAX_PATH, buf) != 0)
-	        && (GetTempFileName(buf, "TCL", 0, buf) != 0)) {
-
+	if (TempFileName(buf) != 0) {
 	    readPipePtr = (WinPipe *) ckalloc(sizeof(WinPipe));
 	    writePipePtr = (WinPipe *) ckalloc(sizeof(WinPipe));
 
@@ -998,6 +1039,10 @@ TclpCreateProcess(interp, argc, argv, inputFile, outputFile, errorFile,
     char image[MAX_PATH];
     char *originalName;
     WinFile *filePtr;
+
+    if (!initialized) {
+	PipeInit();
+    }
 
     applType = ApplicationType(interp, argv[0], execPath, &image[0]);
     if (applType == APPL_NONE) {
@@ -1566,6 +1611,28 @@ ApplicationType(interp, originalName, fullPath, imagePath)
 	    continue;
 	}
 
+	/*
+	 * MKS shell needs to be handled like a DOS program, otherwise
+	 * it start acting wacky...  Basically, it doesn't like being
+	 * detached.
+	 * XXX: We need to have a better way of determining that this
+	 * is an MKS shell such as looking inside the resources.
+	 * XXX: This needs to be case insensitive.
+	 */
+	if (strstr(fullPath, "mks") || strstr(fullPath, "MKS")) {
+	    char *p = strrchr(fullPath, '\\');
+	    if (!p) {
+		p = strrchr(fullPath, '/');
+	    }
+	    if (p) {
+		p++;
+		if (stricmp(p, "sh.exe") == 0) {
+		    applType = APPL_DOS;
+		    break;
+		}
+	    }
+	}
+
 	ext = strrchr(fullPath, '.');
 	if ((ext != NULL) && (strcmpi(ext, ".bat") == 0)) {
 	    applType = APPL_DOS;
@@ -1621,15 +1688,18 @@ ApplicationType(interp, originalName, fullPath, imagePath)
 	    applType = ApplicationType(interp, scriptName, shellPath, NULL);
 	    
 	    if (applType == APPL_NONE) {
-		if (strcmp(scriptName, "/bin/sh") == 0) {
-		    cpnt = getenv("SHELL");
-		    if (cpnt == NULL) {
-			continue;
+		cpnt = Tcl_GetVar2(interp, "tcl_shell", scriptName, TCL_GLOBAL_ONLY);
+		if (! cpnt) {
+		    if (strcmp(scriptName, "/bin/sh") == 0) {
+			cpnt = getenv("SHELL");
 		    }
-		    cpnt = Tcl_TranslateFileName(interp, cpnt, &execBuffer);
-		    strcpy(scriptName, cpnt);
-		    applType = ApplicationType(interp, scriptName, shellPath, NULL);
 		}
+		if (! cpnt) {
+		    continue;
+		}
+		cpnt = Tcl_TranslateFileName(interp, cpnt, &execBuffer);
+		strcpy(scriptName, cpnt);
+		applType = ApplicationType(interp, scriptName, shellPath, NULL);
 	    }
 	    if (applType != APPL_NONE && imagePath != NULL) {
 		strcpy(imagePath, shellPath);
@@ -1677,14 +1747,20 @@ ApplicationType(interp, originalName, fullPath, imagePath)
 	ReadFile(hFile, (void *) buf, 2, &read, NULL);
 	CloseHandle(hFile);
 
-	if ((buf[0] == 'L') && (buf[1] == 'E')) {
-	    applType = APPL_DOS;
-	} else if ((buf[0] == 'N') && (buf[1] == 'E')) {
+	if ((buf[0] == 'N') && (buf[1] == 'E')) {
 	    applType = APPL_WIN3X;
 	} else if ((buf[0] == 'P') && (buf[1] == 'E')) {
 	    applType = APPL_WIN32;
 	} else {
-	    continue;
+	    /*
+	     * Strictly speaking, there should be a test that there
+	     * is an 'L' and 'E' at buf[0..1], to identify the type as 
+	     * DOS, but of course we ran into a DOS executable that 
+	     * _doesn't_ have the magic number -- specifically, one
+	     * compiled using the Lahey Fortran90 compiler.
+	     */
+
+	    applType = APPL_DOS;
 	}
 	break;
     }
@@ -1828,8 +1904,7 @@ MakeTempFile(namePtr)
 {
     char name[MAX_PATH];
 
-    if ((GetTempPath(MAX_PATH, name) == 0)
-	    || (GetTempFileName(name, "TCL", 0, name) == 0)) {
+    if (TempFileName(name) == 0) {
 	return NULL;
     }
 
@@ -1905,6 +1980,10 @@ TclpCreateCommandChannel(readFile, writeFile, errorFile, numPids, pidPtr)
     char channelName[20];
     int channelId;
     PipeInfo *infoPtr = (PipeInfo *) ckalloc((unsigned) sizeof(PipeInfo));
+
+    if (!initialized) {
+	PipeInit();
+    }
 
     infoPtr->watchMask = 0;
     infoPtr->flags = 0;
@@ -2069,14 +2148,19 @@ PipeBlockModeProc(instanceData, mode)
      * hence we have to emulate the behavior. This is done in the input
      * function by checking against a bit in the state. We set or unset the
      * bit here to cause the input function to emulate the correct behavior.
+     * If readerInfo is not set, the pipe was only opened for writing
      */
 
     if (mode == TCL_MODE_NONBLOCKING) {
 	infoPtr->flags |= PIPE_ASYNC;
-	infoPtr->readerInfo->async = 1;
+	if (infoPtr->readerInfo) {
+	    infoPtr->readerInfo->async = 1;
+	}
     } else {
 	infoPtr->flags &= ~(PIPE_ASYNC);
-	infoPtr->readerInfo->async = 0;
+	if (infoPtr->readerInfo) {
+	    infoPtr->readerInfo->async = 0;
+	}
     }
     return 0;
 }
@@ -2156,20 +2240,26 @@ PipeCloseProc(instanceData, interp)
     } else {
         errChan = NULL;
     }
-    result = TclCleanupChildren(interp, pipePtr->numPids, pipePtr->pidPtr,
-            errChan);
-
     errorCode = 0;
     if (pipePtr->readFile != NULL) {
+	pipePtr->readerInfo->rHandleClosed = TRUE;
+
+	/*
+	 * If we destroy the reader thread, we need to do its cleanup.
+	 * There is currently a small race--the handles could possibly be
+	 * closed twice.
+	 */
+	TclWinReaderDestroy(pipePtr->readerInfo);
 	if (TclpCloseFile(pipePtr->readFile) != 0) {
 	    errorCode = errno;
 	}
-	pipePtr->readerInfo->rHandleClosed = TRUE;
 	pipePtr->refCount--;
     }
+
     if (pipePtr->writeFile != NULL) {
-	if (((WinFile *) pipePtr->writeFile)->handle !=
-	    ((WinFile *) pipePtr->readFile)->handle) {
+	if (!pipePtr->readFile ||
+	    (((WinFile *) pipePtr->writeFile)->handle !=
+	     ((WinFile *) pipePtr->readFile)->handle)) {
 	    if (TclpCloseFile(pipePtr->writeFile) != 0) {
 		if (errorCode == 0) {
 		    errorCode = errno;
@@ -2178,48 +2268,22 @@ PipeCloseProc(instanceData, interp)
 	}
 	pipePtr->refCount--;
     }
+    if (pipePtr->readerInfo != NULL) {
+	TclWinReaderFree(pipePtr->readerInfo);
+	pipePtr->readerInfo = NULL;
+    }
+    result = TclCleanupChildren(interp, pipePtr->numPids, pipePtr->pidPtr,
+            errChan);
 
-    pipePtr->refCount--;
-    PipeFreeProc((ClientData) pipePtr);
+    if (pipePtr->numPids > 0) {
+        ckfree((char *) pipePtr->pidPtr);
+    }
+    ckfree((char *) pipePtr);
 
     if (errorCode == 0) {
         return result;
     }
     return errorCode;
-}
-/*
- *----------------------------------------------------------------------
- *
- * PipeFreeProc --
- *
- *	This callback is invoked by Tcl_FreeFile in order to delete
- *	the notifier data associated with a file handle.
- *
- * Results:
- *	None.
- *
- * Side effects:
- *	Removes the PipeInfo from the global pipe list.
- *
- *----------------------------------------------------------------------
- */
-
-static void
-PipeFreeProc(clientData)
-    ClientData clientData;
-{
-    PipeInfo *pipePtr = (PipeInfo *) clientData;
-
-    if (--pipePtr->refCount > 0) {
-	return;
-    }
-    if (pipePtr->readerInfo) {
-	TclWinReaderFree(pipePtr->readerInfo);
-    }
-    if (pipePtr->numPids > 0) {
-        ckfree((char *) pipePtr->pidPtr);
-    }
-    ckfree((char *) pipePtr);
 }
 
 /*
@@ -2373,9 +2437,6 @@ PipeOutputProc(instanceData, buf, toWrite, errorCode)
     if (WriteFile(filePtr->handle, (LPVOID) buf, (DWORD) toWrite,
 	    &bytesWritten, (LPOVERLAPPED) NULL) == FALSE) {
         TclWinConvertError(GetLastError());
-        if (errno == EPIPE) {
-            return 0;
-        }
         *errorCode = errno;
         return -1;
     }
@@ -2512,10 +2573,6 @@ PipeWatchProc(instanceData, mask)
     PipeInfo *infoPtr = (PipeInfo *) instanceData;
     int oldMask = infoPtr->watchMask;
 
-    if (!initialized) {
-	PipeInit();
-    }
-
     /*
      * For now, we just send a message to ourselves so we can poll the
      * channel for readable events.
@@ -2627,11 +2684,14 @@ Tcl_WaitPid(pid, statPtr, options)
     Tcl_Pid result;
     DWORD ret;
 
-    if (options & WNOHANG) {
-	flags = 0;
-    } else {
-	flags = INFINITE;
+    if (!initialized) {
+	PipeInit();
     }
+
+    /*
+     * If no pid is specified, do nothing.
+     */
+    
     if (pid == 0) {
 	*statPtr = 0;
 	return 0;
@@ -2648,10 +2708,27 @@ Tcl_WaitPid(pid, statPtr, options)
 	    break;
 	}
     }
+
+    /*
+     * If the pid is not one of the processes we know about (we started it)
+     * then do nothing.
+     */
+    
     if (infoPtr == NULL) {
+        *statPtr = 0;
 	return 0;
     }
 
+    /*
+     * Officially "wait" for it to finish. We either poll (WNOHANG) or
+     * wait for an infinite amount of time.
+     */
+    
+    if (options & WNOHANG) {
+	flags = 0;
+    } else {
+	flags = INFINITE;
+    }
     ret = WaitForSingleObject(infoPtr->hProcess, flags);
     if (ret == WAIT_TIMEOUT) {
 	*statPtr = 0;
@@ -2666,12 +2743,14 @@ Tcl_WaitPid(pid, statPtr, options)
 	result = pid;
     } else {
 	errno = ECHILD;
+        *statPtr = ECHILD;
 	result = (Tcl_Pid) -1;
     }
 
     /*
      * Remove the process from the process list and close the process handle.
      */
+
     CloseHandle(infoPtr->hProcess);
     *prevPtrPtr = infoPtr->nextPtr;
     ckfree((char*)infoPtr);

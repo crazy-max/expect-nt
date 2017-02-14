@@ -12,7 +12,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkMenu.c 1.143 97/08/08 17:25:28
+ * SCCS: @(#) tkMenu.c 1.148 97/10/29 09:22:00
  */
 
 /*
@@ -336,7 +336,7 @@ Tk_MenuCmd(clientData, interp, argc, argv)
     TkMenuInit();
 
     toplevel = 1;
-    for (i = 2; i < argc; i++) {
+    for (i = 2; i < argc; i += 2) {
 	arg = argv[i];
 	len = strlen(arg);
 	if (len < 2) {
@@ -348,6 +348,7 @@ Tk_MenuCmd(clientData, interp, argc, argv)
 	    if (strcmp(argv[i + 1], "menubar") == 0) {
 		toplevel = 0;
 	    }
+	    break;
 	}
     }
 
@@ -983,17 +984,8 @@ DestroyMenuInstance(menuPtr)
     	
     	if (menuPtr->masterMenuPtr != menuPtr) {
 	    parentMasterMenuPtr = cascadePtr->menuPtr->masterMenuPtr;
-	    if (parentMenuPtr->tearOff && !parentMasterMenuPtr->tearOff) {
-	        parentMasterEntryPtr = 
-	       	    	parentMasterMenuPtr->entries[cascadePtr->index - 1];
-	    } else if (!parentMenuPtr->tearOff
-		    && parentMasterMenuPtr->tearOff) {
-	        parentMasterEntryPtr = 
-	       	    	parentMasterMenuPtr->entries[cascadePtr->index + 1];
-	    } else {
-	        parentMasterEntryPtr =
-	      	    	parentMasterMenuPtr->entries[cascadePtr->index];
-	    }
+	    parentMasterEntryPtr =
+		    parentMasterMenuPtr->entries[cascadePtr->index];
 	    newArgv[0] = "-menu";
 	    newArgv[1] = parentMasterEntryPtr->name;
     	    ConfigureMenuEntry(cascadePtr, 2, newArgv, TK_CONFIG_ARGV_ONLY);
@@ -1023,7 +1015,7 @@ DestroyMenuInstance(menuPtr)
      */
 
     for (i = numEntries - 1; i >= 0; i--) {
-	DestroyMenuEntry((char *) menuPtr->entries[menuPtr->numEntries - 1]);
+	DestroyMenuEntry((char *) menuPtr->entries[i]);
     }
     if (menuPtr->entries != NULL) {
 	ckfree((char *) menuPtr->entries);
@@ -1196,7 +1188,6 @@ DestroyMenuEntry(memPtr)
 {
     register TkMenuEntry *mePtr = (TkMenuEntry *) memPtr;
     TkMenu *menuPtr = mePtr->menuPtr;
-    int i, index = mePtr->index;
 
     if (menuPtr->postedCascade == mePtr) {
 	
@@ -1228,15 +1219,6 @@ DestroyMenuEntry(memPtr)
 	Tcl_UntraceVar(menuPtr->interp, mePtr->name,
 		TCL_GLOBAL_ONLY|TCL_TRACE_WRITES|TCL_TRACE_UNSETS,
 		MenuVarProc, (ClientData) mePtr);
-    }
-    for (i = index; i < menuPtr->numEntries - 1; i++) {
-        menuPtr->entries[i] = menuPtr->entries[i + 1];
-        menuPtr->entries[i]->index = i;
-    }
-    menuPtr->numEntries--;
-    if (menuPtr->numEntries == 0) {
-        ckfree((char *) menuPtr->entries);
-        menuPtr->entries = NULL;
     }
     TkpDestroyMenuEntry(mePtr);
     TkMenuEntryFreeDrawOptions(mePtr);
@@ -1327,13 +1309,13 @@ ConfigureMenu(interp, menuPtr, argc, argv, flags)
 	 * the type string. Once set, a menu's type cannot be changed
 	 */
 	
-	if (menuPtr->menuType == UNKNOWN_TYPE) {
-	    if (strcmp(menuPtr->menuTypeName, "menubar") == 0) {
-	    	menuPtr->menuType = MENUBAR;
-	    } else if (strcmp(menuPtr->menuTypeName, "tearoff") == 0) {
-	    	menuPtr->menuType = TEAROFF_MENU;
+	if (menuListPtr->menuType == UNKNOWN_TYPE) {
+	    if (strcmp(menuListPtr->menuTypeName, "menubar") == 0) {
+	    	menuListPtr->menuType = MENUBAR;
+	    } else if (strcmp(menuListPtr->menuTypeName, "tearoff") == 0) {
+	    	menuListPtr->menuType = TEAROFF_MENU;
 	    } else {
-	    	menuPtr->menuType = MASTER_MENU;
+	    	menuListPtr->menuType = MASTER_MENU;
 	    }
 	}
 	
@@ -1351,8 +1333,19 @@ ConfigureMenu(interp, menuPtr, argc, argv, flags)
 	    }
 	} else if ((menuListPtr->numEntries > 0)
 		&& (menuListPtr->entries[0]->type == TEAROFF_ENTRY)) {
+	    int i;
+
 	    Tcl_EventuallyFree((ClientData) menuListPtr->entries[0],
 	    	    DestroyMenuEntry);
+	    for (i = 0; i < menuListPtr->numEntries - 1; i++) {
+		menuListPtr->entries[i] = menuListPtr->entries[i + 1];
+		menuListPtr->entries[i]->index = i;
+	    }
+	    menuListPtr->numEntries--;
+	    if (menuListPtr->numEntries == 0) {
+		ckfree((char *) menuListPtr->entries);
+		menuListPtr->entries = NULL;
+	    }
 	}
 
 	TkMenuConfigureDrawOptions(menuListPtr);
@@ -1367,9 +1360,9 @@ ConfigureMenu(interp, menuPtr, argc, argv, flags)
 	 */
 	
 	if (strcmp(menuListPtr->menuTypeName, "normal") == 0) {
-	    TkMakeMenuWindow(menuListPtr->tkwin, 1);
+	    TkpMakeMenuWindow(menuListPtr->tkwin, 1);
 	} else if (strcmp(menuListPtr->menuTypeName, "tearoff") == 0) {
-	    TkMakeMenuWindow(menuListPtr->tkwin, 0);
+	    TkpMakeMenuWindow(menuListPtr->tkwin, 0);
 	}
 	
 	/*
@@ -2027,8 +2020,27 @@ MenuAddOrInsert(interp, menuPtr, indexString, argc, argv)
     	    return TCL_ERROR;
     	}
     	if (ConfigureMenuEntry(mePtr, argc-1, argv+1, 0) != TCL_OK) {
-    	    Tcl_EventuallyFree((ClientData) mePtr,
-    	    	    DestroyMenuEntry);
+	    TkMenu *errorMenuPtr;
+	    int i; 
+
+	    for (errorMenuPtr = menuPtr->masterMenuPtr;
+		    errorMenuPtr != NULL;
+		    errorMenuPtr = errorMenuPtr->nextInstancePtr) {
+    		Tcl_EventuallyFree((ClientData) errorMenuPtr->entries[index],
+    	    		DestroyMenuEntry);
+		for (i = index; i < errorMenuPtr->numEntries - 1; i++) {
+		    errorMenuPtr->entries[i] = errorMenuPtr->entries[i + 1];
+		    errorMenuPtr->entries[i]->index = i;
+		}
+		errorMenuPtr->numEntries--;
+		if (errorMenuPtr->numEntries == 0) {
+		    ckfree((char *) errorMenuPtr->entries);
+		    errorMenuPtr->entries = NULL;
+		}
+		if (errorMenuPtr == menuListPtr) {
+		    break;
+		}
+	    }
     	    return TCL_ERROR;
     	}
     	
@@ -2990,31 +3002,28 @@ DeleteMenuCloneEntries(menuPtr, first, last)
 {
 
     TkMenu *menuListPtr;
-    int curFirst, curLast, numDeleted, i;
+    int numDeleted, i;
 
     numDeleted = last + 1 - first;
     for (menuListPtr = menuPtr->masterMenuPtr; menuListPtr != NULL;
 	    menuListPtr = menuListPtr->nextInstancePtr) {
-	if ((menuPtr == menuListPtr) ||
-		(menuPtr->tearOff == menuListPtr->tearOff)) {
-	    curFirst = first;
-	    curLast = last;
-	} else if (menuPtr->tearOff) {
-	    curFirst = first - 1;
-	    curLast = last - 1;
-	} else {
-	    curFirst = first + 1;
-	    curLast = last + 1;
-	}
-
-	for (i = curLast; i >= curFirst; i--) {
+	for (i = last; i >= first; i--) {
 	    Tcl_EventuallyFree((ClientData) menuListPtr->entries[i],
 		    DestroyMenuEntry);
 	}
-	if ((menuListPtr->active >= curFirst) 
-		&& (menuListPtr->active <= curLast)) {
+	for (i = last + 1; i < menuListPtr->numEntries; i++) {
+	    menuListPtr->entries[i - numDeleted] = menuListPtr->entries[i];
+	    menuListPtr->entries[i - numDeleted]->index = i;
+	}
+	menuListPtr->numEntries -= numDeleted;
+	if (menuListPtr->numEntries == 0) {
+	    ckfree((char *) menuListPtr->entries);
+	    menuListPtr->entries = NULL;
+	}
+	if ((menuListPtr->active >= first) 
+		&& (menuListPtr->active <= last)) {
 	    menuListPtr->active = -1;
-	} else if (menuListPtr->active > curLast) {
+	} else if (menuListPtr->active > last) {
 	    menuListPtr->active -= numDeleted;
 	}
 	TkEventuallyRecomputeMenu(menuListPtr);

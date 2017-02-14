@@ -1,0 +1,375 @@
+========
+./README
+========
+
+This is the "unofficial" release 8.0 of BLT for Tcl/Tk 8.0b2 or better.
+It runs under Unix/X11 and Win32. Please read the file "changes" to see
+what's new in this release.
+
+BLT was created by George Howlett with some help of Michael McLennan, both
+at AT&T Bell Labs Innovations for Lucent Technologies. It adds a lot of
+useful commands and widgets to Tcl/Tk, which made it one of the most popular
+extensions over the past years. Just in case you're wondering what BLT stands
+for: to the best of my knowledge, it's an "acronymic pun" (probably based on
+"Bell Labs Technologies") and translates into "Bacon, Lettuce & Tomato" (c.f.
+"bltwish"'s builtin logo: "pack [button .b -bitmap BLT]") [1].
+
+There's a story behind these "unofficial" releases of BLT: shortly after
+George released BLT 2.1 back in April '96, he "disappeared from the scene",
+i.e. he didn't show up in comp.lang.tcl anymore, and he also didn't release
+updates of BLT. Newer releases of Tcl/Tk (7.5/4.1-8.0) broke BLT 2.1, and
+while Tcl/Tk went multi-platform (Unix, Win32(s), MacOS), BLT was still
+restricted to Unix/X11. Of course, there were also some bugs in 2.1.
+Due to BLT's popularity, and because its sources are freely available,
+several people posted patches which fixed bugs, made BLT compatible with
+newer versions of Tcl/Tk, and even made it compile under Win32. Unfortunately,
+these efforts were not coordinated, and therefore some patches clashed with
+others. To address this less than desirable situation, I've offered (end of
+February '97) to coordinate the efforts to keep BLT up to date. Since then,
+I've released several "unofficial", yet public versions of BLT. If people
+run into trouble with these versions, I'm encouraging them to contact me
+instead of George. Likewise, if someone wants to contribute patches, these
+should be made against the latest "unofficial" release and sent to me; I'll
+then try to incorporate them into my source tree and to release an updated
+version ASAP.
+
+I've took the freedom to call this release "8.0-unoff", because it best
+reflects both the fact that it compiles with Tcl/Tk 8.0, and that it is
+an "unofficial" release. This naming convention has also the additional
+benefit that George - should he ever decide to release an improved version
+of BLT - can easily use "8.x" without clashing with the names of my
+distributions [2].
+
+This "unofficial" release is based on BLT 2.1 and requires Tcl/Tk 8.0b2 or
+better (available from ftp://ftp.smli.com/pub/tcl). Note that you need the
+Tcl/Tk source distributions to compile BLT, as it now "#include"s Tcl/Tk's
+private header files.
+
+If you're using Tcl 7.6/Tk 4.2 or earlier versions, then BLT 2.1 is all you
+need (you can download it from the same directory as this "unoff" release:
+ftp://ftp.neosoft.com/pub/tcl/sorted/devel). Tcl 7.6, however, broke BLT's
+"bgexec" command; if you need this command in a 7.6/4.2 environment, just
+copy "./generic/bltBgexec.c" to the "src" directory of your BLT 2.1 source
+tree and recompile it. Rumour has it that BLT 2.1's "bgexec" also won't
+work with Tcl 7.5 (it compiles okay, but produces runtime errors), and
+that this problem can be solved the same way as described above. So, if
+you run into trouble, you might want to give it a try. Note, however,
+that "bgexec" only works under Unix (it's currently disabled for Win32).
+
+To unpack the BLT _source_ distribution under Win32 (i.e., Windows 95/NT),
+you need the "tar" and "gzip" executables. Both are contained in the gnu-win32
+distribution (ftp://ftp.cygnus.com/pub/gnu-win32). Alternatively, you can
+get Tillmann Steinbrecher's excellent "untgz" program from:
+
+   http://people.darmstadt.netsurf.de/tst/untgz.htm
+   ftp://garbo.uwasa.fi/pc/unix/untgz095.zip
+
+"untgz095.zip" contains both sources and binaries for DOS, Win32 and OS/2.
+
+To build BLT 8.x-unoff, please "cd" to the directory reflecting your platform
+("unix", "win" or "mac") and follow the instructions in the "README" files
+contained therein (these also tell you what works and what may/does cause
+problems in this release). The original 2.1 instructions (as listed below)
+are somewhat outdated; however, the manual pages still mostly apply, except
+where they don't. If you find any discrepancies between the manual pages
+and the 8.x-unoff implementation, please let me know.
+
+Greg McFarlane (gregm@nms.otc.com.au) has set up a BLT developers mailing
+list, to which you might want to subscribe in case you want to contribute
+to BLT's further development. To subscribe, please send an email to
+majordomo@dscpl.com.au with the body of the message containing only the
+line "subscribe blt-dev" (without the double quotes; the subject doesn't
+matter). Here's the contents of the list's info file:
+
+   This mailing list is for discussing development issues concerning the
+   BLT extension to Tk.  This includes issues such as porting, bugs and
+   bug fixes, patches and improvements as well as communication between
+   developers to coordinate new releases of BLT.  To keep the volume on
+   this list low, general questions about how to build and use BLT should
+   go to the comp.lang.tcl newsgroup.
+
+
+So far, the following people have actively contributed to the "unofficial"
+releases of BLT:
+
+* Robin Becker (robin@jessikat.demon.co.uk)
+    added Win32-related stuff and some bug fixes
+
+* Sean Gilman (sgilman@worldnet.att.net)
+    added Win32-related stuff and some bug fixes
+
+* Eric Herrin (eric@hsdi.com)
+    fixed bugs in bltGrBar.c
+
+* Mumit Khan (khan@xraylith.wisc.edu)
+    provided preliminary patches to compile BLT with Tcl/Tk 8.0
+
+* Jay Kulpinski (jskulpin@eng01.psf.lmco.com)
+    fixed bugs in bltVector.c
+
+* Greg McFarlane (gregm@nms.otc.com.au)
+    fixed bugs in bltGrMarker.c and bltGrElem.c
+
+* Fabrice Pardo (fabrice.pardo@bagneux.cnet.fr)
+    fixed bugs in bltGrLine.c
+
+* Michael Schumacher (mike@hightec.saarlink.de)
+    added several bug fixes and configuration changes; master of disaster
+
+This list is incomplete; please read the file "changes" to find out who
+else contributed to blt8.0-unoff.
+
+Please send all comments, complaints, bug reports, patches etc. concerning
+the "unoff" releases of BLT to mike@hightec.saarlink.de (Michael Schumacher).
+
+
+Thanks,
+mike
+
+-------
+[1]
+  George claims that BLT stands for "Whatever you want it to", but it's
+  hard to find any similarity between "Wywit" and "BLT"...   ;^)
+
+[2]
+  Shortly after the release of blt8.0b1-unoff, George released BLT 2.3
+  (available from ftp://ftp.tcltk.com/pub/blt/BLT2.3.{README,tar.gz}).
+  While 2.3 offers some new features and fixes some bugs, it's still
+  restricted to Unix/X11, doesn't run with Tcl/Tk 8.0 and introduces some
+  minor incompatibilities compared to BLT 2.1. It may take a while until
+  George releases a version of BLT which runs under Win32 and which is
+  compatible with Tcl/Tk 8.0. Until then, blt8.0-unoff might help you to
+  get your work done. Since I don't want to "compete" with George, I will
+  only try to make sure that this "unofficial" release will compile with
+  the current versions of Tcl/Tk (well, I'm also willing to add some minor
+  improvements), but I will _not_ integrate the changes of BLT 2.3+ unless
+  George explicitly wants me to do so. For the very same reason, I will
+  also _not_ change BLT's API to take advantage of Tcl 8.0's new object
+  interface. I hope you will understand and accept the reason for this
+  decision; remember the famous old saying: "Make BLT, not war!".  :-)
+
+
+********************************************************************************
+***** Everything below the next line is part of BLT 2.1's original README. *****
+********************************************************************************
+
+This is version 2.1 of the BLT library.  BLT is an extension to the Tk
+toolkit, adding new widgets, geometry managers, and miscellaneous
+commands.  It does not require any patching of the Tcl or Tk source
+files.
+
+This release works with Tk versions 3.6, 4.0, 4.1b3.  It may work with
+the other Tk 4.1 beta versions, but I haven't tried them.
+
+---------
+
+The BLT library adds the following commands to Tk:
+
+table	   A table-based geometry manager for Tk.  You specify the 
+	   widget layout as row and column positions in the table.  
+	   Has many options for constraining window resizing.
+	 
+graph	   A X-Y graph widget.  Plots two-variable data.  Supports
+	   two sets of X and Y axes, inverted axes, custom axis
+	   layout.  
+	 
+barchart   A barchart widget.  Plots two-variable data using bars.  
+	   Supports two sets of X and Y axes, inverted axes, custom axis 
+	   layout.  
+	 
+vector	   Creates a vector of floating point values.  The vector's 
+	   components can be manipulated in three ways: through a Tcl 
+	   array variable, a Tcl command, or the C API. 
+
+spline	   Computes a spline fitting a set of data points (x and y vectors) 
+	   and produces a vector of the interpolated images (y-coordinates) 
+	   at a given set of x-coordinates.
+
+busy	   For handling user-interaction when the application is "busy".
+	   Manages an invisible "busy" window which prevents further 
+	   user device (keyboard, mouse, button, etc.) interactions.
+	   Also provides a different cursor which supersedes application
+	   cursors.
+	 
+bgexec	   Like Tcl's "exec ... &", but collects the output, error, and 
+	   status of the detached UNIX subprocesses.  Sets a Tcl variable 
+	   upon completion.  Can be used with "tkwait variable" to handle 
+	   expose events, etc. while waiting for subprocesses to finish.  
+	 
+drag&drop  Command which adds drag-n-drop capabilities to Tk.  It 
+	   provides "send"-style communication between drag-drop 
+	   sources and targets.  The result is a much more powerful
+	   drag-and-drop mechanism than is available with OpenLook
+	   or Motif.  
+	 
+htext	   A simple hypertext widget. Allows text and Tk widgets to
+	   be combined in a scroll-able text window.  Any Tk widget 
+	   can be embedded and used to form hyper-links.  Other 
+	   options allow for selections and text searches.
+	 
+bitmap	   Command for creating and manipulating bitmaps from Tcl. Lets 
+	   you read and write bitmaps from Tcl. Can also define X bitmaps  
+	   and create bitmaps from text strings.  Other options let
+	   you rotate and scale bitmaps.
+	 
+winop	   Low-level Xlib calls let you raise, lower, map, or, unmap 
+	   any window.  
+	 
+watch	   Lets you specify Tcl procedures to be run before and/or
+	   after every Tcl command.  May be used for logging,
+	   tracing, profiling, or debugging or Tcl code.
+	 
+bltdebug   Prints out each Tcl command before it's executed.  
+
+---------
+
+Changes from 2.0 to 2.1.
+
+1. (BUG FIX) Graph not being redrawn when data is added and axis range 
+   is set.
+2. (BUG FIX) Graph elements drawn inaccurately when axes are zoomed tightly.
+3. (BUG FIX) Added check for vector data changes when redrawing graph.
+   Thanks to  Joe Van Andel <vanandel@stout.atd.ucar.edu> for the fix.
+4. (BUG FIX) Replaced "destroy ." with "exit" in demos.  Destroying "."
+   triggers a bug in Tk which causes freed memory to be read (especially
+   if images have been created).
+5. (BUG FIX) Dashes lines not be drawn.  Thanks to Pierre-Louis Bossart
+   <bossart@redhook.llnl.gov>.
+5. (BUG FIX) "bltdebug" command level not reset if current level was
+   non-zero.
+6. (NEW FEATURE) Ranges of vector components can be given using a colon
+   ":" to separate the first and last component indices. You can also
+   offset the indexing so that components may be indexed from something
+   other than zero.
+7. (NEW FEATURE) If you are building BLT with the [incr Tcl] 2.0 versions
+   of Tcl and Tk that include namespace support, "bltwish" will 
+   automatically include itcl and itk too. 
+
+---------
+
+How to get and test BLT:
+
+The following describes how to get and install the BLT library.
+
+0. FTP the distribution from ftp.neosoft.com (Note that the http
+   and ftp locations are different).
+
+   The URL is ftp://ftp.neosoft.com/tcl/extensions/BLT2.1.tar.gz
+
+	ftp ftp.neosoft.com
+	cd languages/tcl/extensions
+	binary 
+	get BLT2.1.tar.gz
+	quit
+
+1. Uncompress and untar the distribution file.  
+
+	zcat BLT2.1.tar.gz | tar -xvf - 
+
+
+   This will create a directory "blt2.1" with the following 
+   subdirectories:
+	
+                        blt2.1
+	     ______________|_____________
+             |          |       |        |
+           demos   library     man      src
+                                         |
+                                       shared
+
+2. Run ./configure
+
+   Go into the "blt2.1" directory 
+
+	cd blt2.1
+
+   and run the auto-configuration script "./configure"
+
+	./configure 
+
+   * If you want to use gcc, it's "./configure -with-cc=gcc"
+
+	./configure -with-cc=gcc
+
+   * By default, the demo program, libBLT.a, the library files, and
+     manual pages will be installed in "/usr/local/blt".  You can 
+     change this by giving the -prefix option to ./configure.
+
+	./configure -prefix=/depot/stuff/blt
+    
+  The "configure" script will report out where it finds the X, Tcl,
+  and Tk header files and libraries.   If it displays "__Edit_config.BLT__" 
+  as a path, you need to edit the generated file "config.BLT".  Simply edit
+  config.BLT with the correct paths and re-run "configure".
+
+  The configure script creates an include file "src/bltConfig.h".
+  It will also generate new Makefiles from their respective templates 
+  (Makefile.in).
+
+	Makefile.in 	        ==> Makefile
+	src/Makefile.in	        ==> src/Makefile
+	src/shared/Makefile.in	==> src/shared/Makefile
+	man/Makefile.in		==> man/Makefile
+	library/Makefile.in	==> library/Makefile
+
+  If "configure" can't find something (e.g. it can't find the X libraries),
+  edit the file "config.BLT" and re-run "configure".
+
+  Otherwise, you'll have to edit the Makefiles by hand.
+
+
+3. Compile the demonstration program "bltwish".
+
+	make 
+
+4. Test by running the demos. 
+
+   Go into the demos directory 
+    
+	cd demos
+
+   and run the test scripts.
+	
+	./graph
+
+   If your system doesn't support "#!" in shell scripts, then it's
+
+	../bltwish ./graph
+
+
+5. Installing BLT
+
+   The following directories will be created when BLT is installed.  
+   By default, the top directory is /usr/local/blt.  
+
+       _____________|_______________
+       |     |        |     |      |  
+      bin  include   lib  blt2.1  man
+     
+   You can change the top directory by supplying the -prefix option to
+   ./configure.
+
+   * If you don't install BLT, you will need to set the BLT_LIBRARY
+     environment variable or the Tcl variable "blt_library" in your
+     scripts.  Otherwise, you may not be able generate PostScript 
+     output for graphs and barcharts, or use the drag&drop facility 
+     properly.
+
+6. Adding BLT to your program.
+
+   Add the following lines to your program's Tcl_AppInit routine in
+   tkAppInit.c
+
+	if (Blt_Init(interp) != TCL_OK) {
+	    return TCL_ERROR;
+        }
+
+   then link with libBLT.a 
+
+   And that's all there's to it.
+
+7. Send bugs reports, suggestions, etc. to
+
+   	gah@mhcnet.att.com and/or ghowlett@fast.net
+
+   Make sure you include BLT and the version number in the subject line.

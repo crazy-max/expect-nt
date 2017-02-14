@@ -1,0 +1,38 @@
+'\"
+'\" Copyright 1992 Regents of the University of California
+'\" Permission to use, copy, modify, and distribute this
+'\" documentation for any purpose and without fee is hereby
+'\" granted, provided that this notice appears in all copies.
+'\" The University of California makes no representations about
+'\" the suitability of this material for any purpose.  It is
+'\" provided "as is" without express or implied warranty.
+'\"
+.so man.macros
+.HS bell BLT
+.BS
+'\" Note:  do not modify the .SH NAME line immediately below!
+.SH NAME
+bell \- ring the bell
+.SH SYNOPSIS
+\fBbell\fR ?\fIpercent\fR?
+.BE
+.SH DESCRIPTION
+The \fBbell\fR command rings the keyboard bell.  \fIPercent\fR is
+relative to the base volume of the keyboard bell and can range from
+-100 to 100 inclusive.
+.PP
+If \fIpercent\fR is nonnegative then the bell volume is:
+.DS C
+base - [(base * \fIpercent\fR) / 100] + \fIpercent\fR
+.DE
+If \fIpercent\fR is negative then the bell volume is:
+.DS C
+base + [(base * \fIpercent\fR) / 100]
+.DE
+The default \fIpercent\fR is 50.
+.SH EXAMPLE
+.DS
+bell
+.DE
+.SH KEYWORDS
+bell, beep

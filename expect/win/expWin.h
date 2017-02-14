@@ -25,7 +25,7 @@
 #define EXP_KILL_CTRL_BREAK 0x4
 
 #define EXP_LOG(format, args) \
-    ExpSyslog("Expect SlaveDriver %s: %d" format, __FILE__, __LINE__, args)
+    ExpSyslog("Expect SlaveDriver (%s: %d): " format, __FILE__, __LINE__, args)
 
 /*
  * The following defines identify the various types of applications that 

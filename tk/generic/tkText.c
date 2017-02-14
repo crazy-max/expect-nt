@@ -13,7 +13,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkText.c 1.103 97/07/31 09:14:37
+ * SCCS: @(#) tkText.c 1.104 97/10/13 15:18:24
  */
 
 #include "default.h"
@@ -1463,8 +1463,8 @@ void
 TkTextLostSelection(clientData)
     ClientData clientData;		/* Information about text widget. */
 {
-#ifdef ALWAYS_SHOW_SELECTION
     register TkText *textPtr = (TkText *) clientData;
+#ifdef ALWAYS_SHOW_SELECTION
     TkTextIndex start, end;
 
     if (!textPtr->exportSelection) {
@@ -1481,8 +1481,8 @@ TkTextLostSelection(clientData)
     TkTextMakeIndex(textPtr->tree, TkBTreeNumLines(textPtr->tree), 0, &end);
     TkTextRedrawTag(textPtr, &start, &end, textPtr->selTagPtr, 1);
     TkBTreeTag(&start, &end, textPtr->selTagPtr, 0);
-    textPtr->flags &= ~GOT_SELECTION;
 #endif
+    textPtr->flags &= ~GOT_SELECTION;
 }
 
 /*

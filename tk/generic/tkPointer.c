@@ -11,7 +11,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkPointer.c 1.10 97/03/05 14:32:21
+ * SCCS: @(#) tkPointer.c 1.12 97/10/31 17:06:24
  */
 
 #include "tkInt.h"
@@ -392,7 +392,7 @@ Tk_UpdatePointer(tkwin, x, y, state)
 	    targetWinPtr = grabWinPtr;
 	}
 
-	if (winPtr != NULL) {
+	if (targetWinPtr != NULL) {
 	    InitializeEvent(&event, targetWinPtr, MotionNotify, x, y,
 		    lastState, NotifyNormal);
 	    Tk_QueueWindowEvent(&event, TCL_QUEUE_TAIL);
@@ -620,15 +620,4 @@ TkGenerateActivateEvents(winPtr, active)
     event.xany.type = active ? ActivateNotify : DeactivateNotify;
     TkQueueEventForAllChildren(winPtr, &event);
     
-    /* 
-     * Generate FocusIn and FocusOut events.  This event
-     * is only sent to the toplevel window.
-     */
-
-    event.xany.window = winPtr->window;
-    event.xany.type = active ? FocusIn : FocusOut;
-    event.xfocus.mode = NotifyNormal;
-    event.xfocus.detail = NotifyNonlinear;
-
-    Tk_QueueWindowEvent(&event, TCL_QUEUE_TAIL);
 }

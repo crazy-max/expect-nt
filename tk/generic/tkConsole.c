@@ -10,10 +10,11 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkConsole.c 1.53 97/07/22 16:36:55
+ * SCCS: @(#) tkConsole.c 1.54 97/10/17 10:46:08
  */
 
-#include "tkInt.h"
+#include "tk.h"
+#include <string.h>
 
 /*
  * A data structure of the following type holds information for each console

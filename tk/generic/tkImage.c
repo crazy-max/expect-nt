@@ -11,7 +11,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkImage.c 1.14 97/08/11 17:02:02
+ * SCCS: @(#) tkImage.c 1.15 97/10/09 09:57:50
  */
 
 #include "tkInt.h"
@@ -654,6 +654,9 @@ Tk_DeleteImage(interp, name)
     TkWindow *winPtr;
 
     winPtr = (TkWindow *) Tk_MainWindow(interp);
+    if (winPtr == NULL) {
+	return;
+    }
     hPtr = Tcl_FindHashEntry(&winPtr->mainPtr->imageTable, name);
     if (hPtr == NULL) {
 	return;

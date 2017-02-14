@@ -1,0 +1,44 @@
+'\"
+'\" Copyright 1992 Regents of the University of California
+'\" Permission to use, copy, modify, and distribute this
+'\" documentation for any purpose and without fee is hereby
+'\" granted, provided that this notice appears in all copies.
+'\" The University of California makes no representations about
+'\" the suitability of this material for any purpose.  It is
+'\" provided "as is" without express or implied warranty.
+'\"
+.so man.macros
+.HS cutbuffer BLT
+.BS
+'\" Note:  do not modify the .SH NAME line immediately below!
+.SH NAME
+cutbuffer \- Manipulate X cut buffer properties
+.SH SYNOPSIS
+\fBcutbuffer\fI get ?number?\fR
+.br
+\fBcutbuffer\fI rotate ?count?\fR
+.br
+\fBcutbuffer\fI set value ?number?\fR
+.BE
+.SH DESCRIPTION
+.PP
+The \fBcutbuffer\fR command allows you to read or modify the eight X cut
+buffer properties. You can also rotate the buffers properties.
+.SH OPERATIONS
+The following operations are available for the \fBcutbuffer\fR command:
+.TP
+\fBcutbuffer get \fI?number?\fR 
+Returns the value of a cutbuffer \fInumber\fR.  \fINumber\fR must be a
+number between 0 and 7.  The default is 0.  The cutbuffer is returned
+exactly, except that NUL bytes are converted to '@' characters.  If a
+cut buffer \fInumber\fR does not exist, then \fC""\fR is returned.
+.TP
+\fBcutbuffer rotate \fI?count?\fR 
+Rotates the cut buffers by \fIcount\fR. \fICount\fR must be a number
+between -7 and 7. The default is 1.
+.TP
+\fBcutbuffer set \fIvalue\fR ?\fInumber\fR?  
+Sets the cutbuffer \fInumber\fR to \fIvalue\fR.  \fINumber\fR must be a
+number between 0 and 7.  The default is 0.
+.SH KEYWORDS
+cut buffer, property

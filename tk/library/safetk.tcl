@@ -2,7 +2,7 @@
 #
 # Support procs to use Tk in safe interpreters.
 #
-# SCCS: @(#) safetk.tcl 1.6 97/08/13 16:08:18
+# SCCS: @(#) safetk.tcl 1.8 97/10/29 14:59:16
 #
 # Copyright (c) 1997 Sun Microsystems, Inc.
 #
@@ -78,6 +78,9 @@ proc ::safe::loadTk {} {}
 	::interp eval $slave [list set argv [list "-use" $use]];
 	::interp eval $slave [list set argc 2];
 	load {} Tk $slave
+	# Remove env(DISPLAY) if it's in there (if it has been set by
+	# tkInterpInit)
+	::interp eval $slave {catch {unset env(DISPLAY)}}
 	return $slave
     }
 
@@ -127,7 +130,7 @@ proc ::safe::tkTopLevel {slave} {
     # but still have the default background instead of red one from the parent
     frame  $wc.fb -bd 0 ;
     button $wc.fb.b -text "Delete" \
-	    -bd 2  -padx 2 -pady 0 \
+	    -bd 1  -padx 2 -pady 0 -highlightthickness 0 \
 	    -command [list ::safe::tkDelete $w $w $slave]
     pack $wc.fb.b -side right -fill both ;
     pack $wc.fb -side right -fill both -expand 1;

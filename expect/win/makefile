@@ -69,18 +69,24 @@ TESTSIG		= testsig.exe
 TESTCALC	= testcalc.exe
 TESTCONSOUT	= testconsout.exe
 TESTCLIB	= testclib.exe
+TESTCLIB2	= testclib2.exe
 TESTA1		= testa1.exe
 TESTA2		= testa2.exe
 TESTMODEM	= testmodem.exe
 TESTWSTATION	= testwstation.exe
 TESTWPROG	= testwprog.exe
+TESTCRASH	= testcrash.exe
 DEBUGGER	= debugger.exe
 LIBEXPECT	= expectlib52.lib
 LIBEXPECTDLL	= expectlib52.dll
 
 TEST_APPS = $(TESTCALC) $(TESTCONSOUT) $(TESTSIG) $(TESTCLIB) \
-	$(TESTA2) $(TESTMODEM)
+	$(TESTCLIB2) $(TESTA2) $(TESTMODEM) $(TESTCRASH)
 TEST_OTHERS = $(TESTWSTATION) $(TESTWPROG)
+
+TESTCRASH_OBJS = \
+	$(TMPDIR)\testcrash.obj \
+	$(TMPDIR)\msjexhnd.obj
 
 EXPECTOBJS = \
 	$(TMPDIR)\exp_main_exp.obj
@@ -226,7 +232,8 @@ libcdll = msvcrt.lib oldnames.lib
 !ENDIF
 
 baselibs   = kernel32.lib $(optlibs) advapi32.lib
-winlibs    = $(baselibs) user32.lib gdi32.lib comdlg32.lib winspool.lib
+winlibs    = $(baselibs) user32.lib gdi32.lib comdlg32.lib winspool.lib \
+	     ws2_32.lib
 
 guilibs	   = $(libc) $(winlibs)
 conlibs	   = $(libc) $(baselibs)
@@ -351,16 +358,27 @@ $(TESTWPROG): $(WINDIR)\testwprog.c
 	$(link32) $(ldebug) $(guilflags) $(guilibsdll) -out:$@ \
 		$(TMPDIR)\testwprog.obj 
 
+$(TESTCRASH): $(TESTCRASH_OBJS)
+	set LIB=$(TOOLS32)\lib
+	$(link32) $(ldebug) $(conlflags) -out:$@ $(conlibsdll) \
+		$(guilibsdll) $(TESTCRASH_OBJS)
+
 $(TESTCLIB): $(WINDIR)\testclib.c
 	$(cc32) $(CON_CFLAGS) $(EXPECT_INCLUDES) -Fo$(TMPDIR)\ $?
 	set LIB=$(TOOLS32)\lib
 	$(link32) $(ldebug) $(LIBEXPECT) $(guilibs) \
 		-out:$@ $(TMPDIR)\testclib.obj 
 
+$(TESTCLIB2): $(WINDIR)\testclib2.c
+	$(cc32) $(CON_CFLAGS) $(EXPECT_INCLUDES) -Fo$(TMPDIR)\ $?
+	set LIB=$(TOOLS32)\lib
+	$(link32) $(ldebug) $(LIBEXPECT) $(guilibs) \
+		-out:$@ $(TMPDIR)\testclib2.obj 
+
 $(SLAVEDRV): $(SLAVE_OBJS)
 	set LIB=$(TOOLS32)\lib
 	$(link32) $(ldebug) $(conlflags) -out:$@ $(conlibsdll) \
-		$(guilibsdll) $(SLAVE_OBJS)
+		$(guilibsdll) imagehlp.lib $(SLAVE_OBJS)
 #	$(link32) $(ldebug) $(conlflags) $(guilibs) -out:$@ $(SLAVE_OBJS)
 
 $(EXPECTDLL): $(EXP_DLL_OBJS) $(TMPDIR)\expect.def $(TMPDIR)\expect.res
@@ -400,6 +418,9 @@ $(EXP_DLL_OBJS)
 	echo exp_logfile_all >> $@
 	echo exp_loguser >> $@
 	echo exp_is_debugging >> $@
+
+$(TMPDIR)\expWinSlaveDbgW.obj: $(WINDIR)\expWinSlaveDbg.c
+	$(cc32) $(EXPECT_CFLAGS) -DUNICODE -D_UNICODE -Fo$@ $?
 
 #
 # Implicit rules

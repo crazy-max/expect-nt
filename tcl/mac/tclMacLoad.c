@@ -10,7 +10,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclMacLoad.c 1.18 96/12/12 19:30:22
+ * SCCS: @(#) tclMacLoad.c 1.20 97/11/20 18:39:20
  */
 
 #include <CodeFragments.h>
@@ -18,6 +18,16 @@
 #include <Resources.h>
 #include <Strings.h>
 #include <FSpCompat.h>
+
+/*
+ * Seems that the 3.0.1 Universal headers leave this define out.  So we
+ * define it here...
+ */
+ 
+#ifndef fragNoErr
+    #define fragNoErr noErr
+#endif
+
 #include "tclPort.h"
 #include "tclInt.h"
 #include "tclMacInt.h"
@@ -98,15 +108,15 @@ TclLoadFile(
 				/* Where to return the addresses corresponding
 				 * to sym1 and sym2. */
 {
-    ConnectionID connID;
+    CFragConnectionID connID;
     Ptr dummy;
     OSErr err;
-    SymClass symClass;
+    CFragSymbolClass symClass;
     FSSpec fileSpec;
     short fragFileRef, saveFileRef;
     Handle fragResource;
     UInt32 offset = 0;
-    UInt32 length = kWholeFork;
+    UInt32 length = kCFragGoesToEOF;
     char packageName[255];
     Str255 errName;
     
@@ -177,7 +187,7 @@ TclLoadFile(
     
     c2pstr(packageName);
     err = GetDiskFragment(&fileSpec, offset, length, (StringPtr) packageName,
-	    kLoadLib, &connID, &dummy, errName);
+	    kLoadCFrag, &connID, &dummy, errName);
     if (err != fragNoErr) {
 	p2cstr(errName);
 	Tcl_AppendResult(interp, "couldn't load file \"", fileName,

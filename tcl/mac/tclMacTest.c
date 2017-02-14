@@ -9,7 +9,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclMacTest.c 1.8 97/05/05 14:14:38
+ * SCCS: @(#) tclMacTest.c 1.9 97/09/09 16:36:37
  */
 
 #define TCL_TEST
@@ -125,7 +125,7 @@ WriteTextResource(
     char *errStr;
     char *fileName = NULL, *rsrcName = NULL;
     char *data = NULL;
-    int rsrcID = -1, i;
+    int rsrcID = -1, i, protectIt = 0;
     short fileRef = -1;
     OSErr err;
     Handle dataHandle;
@@ -145,6 +145,8 @@ WriteTextResource(
 	} else if (!strcmp(argv[i], "-file")) {
 	    fileName = argv[i + 1];
 	    i++;
+	} else if (!strcmp(argv[i], "-protected")) {
+	    protectIt = 1;
 	} else {
 	    data = argv[i];
 	}
@@ -195,7 +197,12 @@ WriteTextResource(
      * Add the resource to the file and close it.
      */
     AddResource(dataHandle, 'TEXT', rsrcID, resourceName);
+    
     UpdateResFile(fileRef);
+    if (protectIt) {
+        SetResAttrs(Get1Resource('TEXT', rsrcID), resProtected);
+    }
+    
     CloseResFile(fileRef);
     return TCL_OK;
     

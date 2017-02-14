@@ -8,7 +8,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkGrid.c 1.38 97/06/25 19:34:25
+ * SCCS: @(#) tkGrid.c 1.39 97/10/10 10:12:03
  */
 
 #include "tkInt.h"
@@ -445,6 +445,10 @@ Tk_GridCmd(clientData, interp, argc, argv)
 	    	}
 		Tk_ManageGeometry(slave, (Tk_GeomMgr *) NULL,
 			(ClientData) NULL);
+		if (slavePtr->masterPtr->tkwin != Tk_Parent(slavePtr->tkwin)) {
+		    Tk_UnmaintainGeometry(slavePtr->tkwin,
+			    slavePtr->masterPtr->tkwin);
+		}
 		Unlink(slavePtr);
 		Tk_UnmapWindow(slavePtr->tkwin);
 	    }

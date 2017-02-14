@@ -6,12 +6,12 @@
  *	one per line, and provides scrolling and selection.
  *
  * Copyright (c) 1990-1994 The Regents of the University of California.
- * Copyright (c) 1994-1995 Sun Microsystems, Inc.
+ * Copyright (c) 1994-1997 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkListbox.c 1.116 97/07/31 09:09:28
+ * SCCS: @(#) tkListbox.c 1.120 97/10/29 13:06:59
  */
 
 #include "tkPort.h"
@@ -279,7 +279,7 @@ static void		DeleteEls _ANSI_ARGS_((Listbox *listPtr, int first,
 static void		DestroyListbox _ANSI_ARGS_((char *memPtr));
 static void		DisplayListbox _ANSI_ARGS_((ClientData clientData));
 static int		GetListboxIndex _ANSI_ARGS_((Tcl_Interp *interp,
-			    Listbox *listPtr, char *string, int numElsOK,
+			    Listbox *listPtr, char *string, int endIsSize,
 			    int *indexPtr));
 static void		InsertEls _ANSI_ARGS_((Listbox *listPtr, int index,
 			    int argc, char **argv));
@@ -400,7 +400,7 @@ Tk_ListboxCmd(clientData, interp, argc, argv)
     listPtr->partialLine = 0;
     listPtr->setGrid = 0;
     listPtr->maxWidth = 0;
-    listPtr->xScrollUnit = 0;
+    listPtr->xScrollUnit = 1;
     listPtr->xOffset = 0;
     listPtr->selectMode = NULL;
     listPtr->numSelected = 0;
@@ -485,9 +485,14 @@ ListboxWidgetCmd(clientData, interp, argc, argv)
 	    goto error;
 	}
 	ListboxRedrawRange(listPtr, listPtr->active, listPtr->active);
-	if (GetListboxIndex(interp, listPtr, argv[2], 0, &index)
-		!= TCL_OK) {
+	if (GetListboxIndex(interp, listPtr, argv[2], 0, &index) != TCL_OK) {
 	    goto error;
+	}
+	if (index >= listPtr->numElements) {
+	    index = listPtr->numElements-1;
+	}
+	if (index < 0) {
+	    index = 0;
 	}
 	listPtr->active = index;
 	ListboxRedrawRange(listPtr, listPtr->active, listPtr->active);
@@ -502,6 +507,9 @@ ListboxWidgetCmd(clientData, interp, argc, argv)
 	}
 	if (GetListboxIndex(interp, listPtr, argv[2], 0, &index) != TCL_OK) {
 	    goto error;
+	}
+	if ((index >= listPtr->numElements) || (index < 0)) {
+	    goto done;
 	}
 	for (i = 0, elPtr = listPtr->firstPtr; i < index;
 		i++, elPtr = elPtr->nextPtr) {
@@ -575,14 +583,20 @@ ListboxWidgetCmd(clientData, interp, argc, argv)
 	if (GetListboxIndex(interp, listPtr, argv[2], 0, &first) != TCL_OK) {
 	    goto error;
 	}
-	if (argc == 3) {
-	    last = first;
-	} else {
-	    if (GetListboxIndex(interp, listPtr, argv[3], 0, &last) != TCL_OK) {
-		goto error;
+	if (first < listPtr->numElements) {
+	    if (argc == 3) {
+		last = first;
+	    } else {
+		if (GetListboxIndex(interp, listPtr, argv[3], 0,
+			&last) != TCL_OK) {
+		    goto error;
+		}
+		if (last >= listPtr->numElements) {
+		    last = listPtr->numElements-1;
+		}
 	    }
+	    DeleteEls(listPtr, first, last);
 	}
-	DeleteEls(listPtr, first, last);
     } else if ((c == 'g') && (strncmp(argv[1], "get", length) == 0)) {
 	int first, last, i;
 	Element *elPtr;
@@ -599,13 +613,22 @@ ListboxWidgetCmd(clientData, interp, argc, argv)
 		0, &last) != TCL_OK)) {
 	    goto error;
 	}
+	if (first >= listPtr->numElements) {
+	    goto done;
+	}
+	if (last >= listPtr->numElements) {
+	    last = listPtr->numElements-1;
+	}
+
 	for (elPtr = listPtr->firstPtr, i = 0; i < first;
 		i++, elPtr = elPtr->nextPtr) {
 	    /* Empty loop body. */
 	}
 	if (elPtr != NULL) {
 	    if (argc == 3) {
-		interp->result = elPtr->text;
+		if (first >= 0) {
+		    interp->result = elPtr->text;
+		}
 	    } else {
 		for (  ; i <= last; i++, elPtr = elPtr->nextPtr) {
 		    Tcl_AppendElement(interp, elPtr->text);
@@ -694,6 +717,12 @@ ListboxWidgetCmd(clientData, interp, argc, argv)
 	if (GetListboxIndex(interp, listPtr, argv[2], 0, &index) != TCL_OK) {
 	    goto error;
 	}
+	if (index >= listPtr->numElements) {
+	    index = listPtr->numElements-1;
+	}
+	if (index < 0) {
+	    index = 0;
+	}
 	diff = listPtr->topIndex-index;
 	if (diff > 0) {
 	    if (diff <= (listPtr->fullLines/3)) {
@@ -740,6 +769,12 @@ ListboxWidgetCmd(clientData, interp, argc, argv)
 		    argv[0], " selection anchor index\"", (char *) NULL);
 		goto error;
 	    }
+	    if (first >= listPtr->numElements) {
+		first = listPtr->numElements-1;
+	    }
+	    if (first < 0) {
+		first = 0;
+	    }
 	    listPtr->selectAnchor = first;
 	} else if ((c == 'c') && (strncmp(argv[2], "clear", length) == 0)) {
 	    ListboxSelect(listPtr, first, last, 0);
@@ -752,11 +787,15 @@ ListboxWidgetCmd(clientData, interp, argc, argv)
 			argv[0], " selection includes index\"", (char *) NULL);
 		goto error;
 	    }
+	    if ((first < 0) || (first >= listPtr->numElements)) {
+		interp->result = "0";
+		goto done;
+	    }
 	    for (elPtr = listPtr->firstPtr, i = 0; i < first;
 		    i++, elPtr = elPtr->nextPtr) {
 		/* Empty loop body. */
 	    }
-	    if ((elPtr != NULL) && (elPtr->selected)) {
+	    if (elPtr->selected) {
 		interp->result = "1";
 	    } else {
 		interp->result = "0";
@@ -876,6 +915,7 @@ ListboxWidgetCmd(clientData, interp, argc, argv)
 		"xview, or yview", (char *) NULL);
 	goto error;
     }
+    done:
     Tcl_Release((ClientData) listPtr);
     return result;
 
@@ -1270,6 +1310,9 @@ ListboxComputeGeometry(listPtr, fontChanged, maxIsStale, updateGrid)
 
     if (fontChanged  || maxIsStale) {
 	listPtr->xScrollUnit = Tk_TextWidth(listPtr->tkfont, "0", 1);
+	if (listPtr->xScrollUnit == 0) {
+	    listPtr->xScrollUnit = 1;
+	}
 	listPtr->maxWidth = 0;
 	for (elPtr = listPtr->firstPtr; elPtr != NULL; elPtr = elPtr->nextPtr) {
 	    if (fontChanged) {
@@ -1684,15 +1727,15 @@ ListboxCmdDeletedProc(clientData)
  */
 
 static int
-GetListboxIndex(interp, listPtr, string, numElsOK, indexPtr)
+GetListboxIndex(interp, listPtr, string, endIsSize, indexPtr)
     Tcl_Interp *interp;		/* For error messages. */
     Listbox *listPtr;		/* Listbox for which the index is being
 				 * specified. */
     char *string;		/* Specifies an element in the listbox. */
-    int numElsOK;		/* 0 means the return value must be less
-				 * less than the number of entries in
-				 * the listbox;  1 means it may also be
-				 * equal to the number of entries. */
+    int endIsSize;		/* If 1, "end" refers to the number of
+				 * entries in the listbox.  If 0, "end"
+				 * refers to 1 less than the number of
+				 * entries. */
     int *indexPtr;		/* Where to store converted index. */
 {
     int c;
@@ -1707,7 +1750,11 @@ GetListboxIndex(interp, listPtr, string, numElsOK, indexPtr)
 	    && (length >= 2)) {
 	*indexPtr = listPtr->selectAnchor;
     } else if ((c == 'e') && (strncmp(string, "end", length) == 0)) {
-	*indexPtr = listPtr->numElements;
+	if (endIsSize) {
+	    *indexPtr = listPtr->numElements;
+	} else {
+	    *indexPtr = listPtr->numElements - 1;
+	}
     } else if (c == '@') {
 	int y;
 	char *p, *end;
@@ -1728,16 +1775,6 @@ GetListboxIndex(interp, listPtr, string, numElsOK, indexPtr)
 	    Tcl_ResetResult(interp);
 	    goto badIndex;
 	}
-    }
-    if (numElsOK) {
-	if (*indexPtr > listPtr->numElements) {
-	    *indexPtr = listPtr->numElements;
-	}
-    } else if (*indexPtr >= listPtr->numElements) {
-	*indexPtr = listPtr->numElements-1;
-    }
-    if (*indexPtr < 0) {
-	*indexPtr = 0;
     }
     return TCL_OK;
 
@@ -1821,14 +1858,15 @@ ChangeListboxOffset(listPtr, offset)
      */
 
     maxOffset = listPtr->maxWidth - (Tk_Width(listPtr->tkwin) -
-	    2*listPtr->inset - 2*listPtr->selBorderWidth) - 1;
+	    2*listPtr->inset - 2*listPtr->selBorderWidth)
+	    + listPtr->xScrollUnit - 1;
     if (offset > maxOffset) {
 	offset = maxOffset;
     }
     if (offset < 0) {
 	offset = 0;
     }
-    offset -= offset%listPtr->xScrollUnit;
+    offset -= offset % listPtr->xScrollUnit;
     if (offset != listPtr->xOffset) {
 	listPtr->xOffset = offset;
 	listPtr->flags |= UPDATE_H_SCROLLBAR;
@@ -1864,7 +1902,7 @@ ListboxScanTo(listPtr, x, y)
     int newTopIndex, newOffset, maxIndex, maxOffset;
 
     maxIndex = listPtr->numElements - listPtr->fullLines;
-    maxOffset = listPtr->maxWidth + (listPtr->xScrollUnit-1)
+    maxOffset = listPtr->maxWidth + (listPtr->xScrollUnit - 1)
 	    - (Tk_Width(listPtr->tkwin) - 2*listPtr->inset
 	    - 2*listPtr->selBorderWidth - listPtr->xScrollUnit);
 
@@ -1985,8 +2023,14 @@ ListboxSelect(listPtr, first, last, select)
 	first = last;
 	last = i;
     }
-    if (first >= listPtr->numElements) {
+    if ((last < 0) || (first >= listPtr->numElements)) {
 	return;
+    }
+    if (first < 0) {
+	first = 0;
+    }
+    if (last >= listPtr->numElements) {
+	last = listPtr->numElements - 1;
     }
     oldCount = listPtr->numSelected;
     firstRedisplay = -1;

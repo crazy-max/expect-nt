@@ -1,0 +1,69 @@
+======
+./ToDo
+======
+
+This file describes known bugs that need to be fixed, and useful features
+that aren't currently implemented in BLT, but should be part of a future
+release. If you're willing to help getting these things done, please
+send an email to mike@hightec.saarlink.de and tell me what you'd like to
+fix/implement, so that I can coordinate the efforts of the BLT community.
+Note that the numbers below do not imply any priority - their only
+purpose is to identify the list's entries. As soon as the bug/feature
+described by an entry has been fixed/implemented, it will be deleted from
+the list.
+
+================================================================================
+
+1. It would be nice to have a test suite just like Tcl/Tk, which would
+facilitate verifying BLT's correct behaviour.
+
+2. Porting BLT to the MacIntosh (i.e. MacOS/Rhapsody); this certainly
+takes more than just a weekend, but it shouldn't be too hard, either.
+
+3. The tile widgets are not yet available under Win32; at least frames
+and toplevels should get ported (tile buttons/labels/scrollbars would be
+nice, too, but I don't know if this is possible at all).
+
+4. "bgexec" is currently only available under Unix; it would be nice to
+also have it under Win32 (it's certainly feasible, but it might require
+a multithreaded implementation - something that isn't yet supported by Tcl).
+
+5. "piechart" needs a lot of work: more configuration options, Postscript
+generation, higher flexibility, 3D-look, cross-platform portability, etc.
+
+6. "busy" is currently only available under Unix; it would be nice to
+also have it under Win32.
+
+7. makefile.vc needs some cleanup (and a single makefile.vc would be
+desirable); also, makefiles for Win32 compilers other than MSVC++
+(Borland, Watcom, ...) should be added.
+
+8. Scanning (<B2-Motion>) a "htext" widget doesn't work under Win32.
+
+9. There's a subtle bug in the "htext" widget: it "flickers" if you
+scan (<B2-Motion>) it past the last line of the text it contains.
+
+11. Rotating text bitmaps (bltText.c::Blt_RotateBitmap()) under Win32
+currently only works for multiples of 45 degrees. [Seems to be a
+problem of Windows 95, as NT is able to render arbitrary angles.]
+
+12. A binary-only distribution of BLT for Win32 might be helpful; the
+main problem is: how to convert the manual pages to the WinHelp format?
+[Okay, there's now a binary distribution of blt8.0-unoff, but the
+"WinHelp problem" remains.]
+
+13. The manual pages need to be checked if they're still up to date
+and corrected if this is not the case.
+
+17. How about a graphical Tcl/Tk debugger based on BLT's "watch" command?
+
+18. Autoscaling of the y-axis seems to lead to strange results in case of
+".graph yaxis configure -logscale true".
+
+19. Blt_SafeInit() is probably not really safe: it just calls Blt_Init(),
+which in turn enables commands like "bgexec".
+
+20. "library/bltGraph.tcl.z2" doesn't zoom correctly if a graph is drawn
+invertedly ("graph .g -invert 1")
+
+21. [sentinel; this number will be used for the next entry of this list]

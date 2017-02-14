@@ -1,0 +1,90 @@
+# -------------------------------------------------------------------------
+#
+# This file contains the configuration paths for BLT from the last
+# time "@srcdir@/configure" was run.
+# [This file is generated each time "configure" is run from the
+# template "@srcdir@/cf/config.BLT.in".]
+#
+# If a path is wrong, you can change it in this file and then rerun
+# "configure".  The paths in this file are considered before "configure"
+# makes any other guesses as to where files, libraries, etc. are.
+#
+# You can use this to override the paths that "configure" found
+# (especially if "configure" failed to find anything).
+#
+# Please note that the paths (expect for PREFIX) must be valid when
+# "configure" is rerun or they will be ignored.
+#
+# If you want the default paths again, simply delete this file
+# (config.BLT) and rerun "@srcdir@/configure".
+#
+# -------------------------------------------------------------------------
+
+# -------------------------------------------------------------------------
+#
+# TCLINCDIR:  Directory where tcl.h can be found (absolute path)
+#
+#
+TCLINCDIR="@TCLINCDIR@"
+
+# -------------------------------------------------------------------------
+#
+# TCLLIBDIR:  Directory where libtcl.a can be found (absolute path)
+#
+#
+TCLLIBDIR="@TCLLIBDIR@"
+
+# -------------------------------------------------------------------------
+#
+# TKINCDIR:  Directory where tk.h can be found (absolute path)
+#
+#
+TKINCDIR="@TKINCDIR@"
+
+
+# -------------------------------------------------------------------------
+#
+# TKLIBDIR:  Directory where libtk.a can be found (absolute path)
+#
+#
+TKLIBDIR="@TKLIBDIR@"
+
+# -------------------------------------------------------------------------
+#
+# XLIBDIR:  Directory where libX11.a can be found (absolute path)
+#
+#
+XLIBDIR="@XLIBDIR@"
+
+# -------------------------------------------------------------------------
+#
+# XINCDIR:  Directory where X11/X11.h can be found (absolute path)
+#
+#
+XINCDIR="@XINCDIR@"
+
+# -------------------------------------------------------------------------
+#
+# PREFIX:  Directory where BLT (blt@BLT_PATCHLEVEL@) will be installed
+#
+#	    blt_wish  => @BINDIR@
+#	    libBLT.a  => @LIBDIR@
+#	    libBLT.so => @LIBDIR@/shared
+#	    scripts   => @BLT_LIBRARY@
+#	    manuals   => @MANDIR@
+#	    
+PREFIX="@PREFIX@"
+
+# -------------------------------------------------------------------------
+#
+# CC:  C compiler to use
+#
+#	    
+CC="@CC@"
+
+# -------------------------------------------------------------------------
+#
+# CFLAGS:  Flags to pass to the C compiler
+#
+#	    
+CFLAGS="@CFLAGS@"

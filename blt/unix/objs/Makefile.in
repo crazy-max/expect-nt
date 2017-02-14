@@ -1,0 +1,191 @@
+# ------------------------------------------------------------------------
+# 	Makefile for normal version of BLT library
+# ------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------
+# 	C Compiler options 
+# ------------------------------------------------------------------------
+
+CC           	= @CC@
+CFLAGS  	= @CFLAGS@ @GCCFLAGS@
+DEFINES      	= 
+DEF_BLTINIT	= -DBLT_LIBRARY=\"$(BLT_LIBRARY)\"
+TOPDIR      	= @DESTDIR@
+LIBDIR      	= @LIBDIR@
+BLT_LIBRARY  	= @BLT_LIBRARY@
+
+# ------------------------------------------------------------------------
+# 	Directories containing Tcl and Tk include files and libraries
+# ------------------------------------------------------------------------
+
+TCL_INCLUDE   	= @TCLINCSW@ @TCLINCSW@/../unix
+TK_INCLUDE    	= @TKINCSW@ @TKINCSW@/../unix
+X_INCLUDE     	= @XINCSW@
+INCLUDES	= -I. -I@srcdir@ -I@srcdir@/../../generic \
+		    $(TK_INCLUDE) $(TCL_INCLUDE) $(X_INCLUDE)
+
+# ------------------------------------------------------------------------
+# 	Don't edit anything beyond this point
+# ------------------------------------------------------------------------
+
+TK_8_OBJS	= bltButton.o bltUnixButton.o bltFrame.o bltScrollbar.o
+TK_8_SRCS	= bltButton.c bltUnixButton.c bltFrame.c bltScrollbar.c
+
+OBJS 		= bltGraph.o bltGrAxis.o bltGrBar.o bltGrElem.o \
+		  bltGrGrid.o bltGrHairs.o bltGrLegd.o bltGrLine.o \
+		  bltGrMarker.o bltGrMisc.o bltGrPs.o \
+        	  bltBgexec.o bltBitmap.o bltBusy.o bltTile.o \
+		  bltDebug.o bltDragDrop.o bltHtext.o bltPie.o \
+		  bltSpline.o bltTable.o bltVector.o bltWatch.o bltWinOp.o \
+        	  bltInit.o bltInput.o bltList.o bltText.o bltUtil.o \
+		  $(TK_@TK_MAJOR_VERSION@_OBJS)
+
+SRCS 		= bltGraph.c bltGrAxis.c bltGrBar.c bltGrElem.c \
+		  bltGrGrid.c bltGrHairs.c bltGrLegd.c bltGrLine.c \
+		  bltGrMarker.c bltGrMisc.c bltGrPs.c \
+        	  bltBgexec.c bltBitmap.c bltBusy.c \
+		  bltDebug.c bltDragDrop.c bltHtext.c \
+		  bltSpline.c bltTable.c bltVector.c bltWatch.c bltWin.c \
+        	  bltInit.c bltInput.c bltList.c bltText.c bltUtil.c \
+		  $(TK_@TK_MAJOR_VERSION@_SRCS)
+
+libname  	= libBLT@BLT_LIBVERSION@.a
+CC_SWITCHES	= $(CFLAGS) $(DEFINES) $(INCLUDES)
+INSTALL  	= @INSTALL@
+INSTALL_DATA  	= @INSTALL_DATA@
+RANLIB   	= @RANLIB@
+SHELL    	= /bin/sh
+AR       	= ar rc
+RM       	= rm -f
+LINT		= lint
+LINTFLAGS	= -axhbn
+srcdir 		= @srcdir@/../../generic
+VPATH		= @srcdir@/..:@srcdir@/../../generic
+
+all: $(libname)
+
+$(libname):  $(OBJS)
+	$(RM) $@
+	$(AR) $@ $(OBJS)
+	$(RANLIB) $@
+
+install: $(libname) install-dirs
+	$(INSTALL_DATA) $(libname) $(LIBDIR)
+
+install-dirs:
+	@srcdir@/../cf/mkinstalldirs $(LIBDIR)
+
+clean:
+	$(RM) $(OBJS) $(libname) *.bak *\~ "#"* *pure* .pure*
+
+lint:
+	$(LINT) $(LINTFLAGS) $(DEFINES) $(INCLUDES) $(SRCS)
+
+.c.o:
+	$(CC) -c $(CC_SWITCHES) $<
+
+#
+# some "make"s are not aware of implicit dependencies, so...
+#
+bltGraph.o:	$(srcdir)/bltGraph.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltGraph.c
+
+bltGrAxis.o:	$(srcdir)/bltGrAxis.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltGrAxis.c
+
+bltGrBar.o:	$(srcdir)/bltGrBar.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltGrBar.c
+
+bltGrElem.o:	$(srcdir)/bltGrElem.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltGrElem.c
+
+bltGrGrid.o:	$(srcdir)/bltGrGrid.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltGrGrid.c
+
+bltGrHairs.o:	$(srcdir)/bltGrHairs.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltGrHairs.c
+
+bltGrLegd.o: 	$(srcdir)/bltGrLegd.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltGrLegd.c
+
+bltGrLine.o:	$(srcdir)/bltGrLine.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltGrLine.c
+
+bltGrMisc.o: 	$(srcdir)/bltGrMisc.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltGrMisc.c
+
+bltGrPs.o: 	$(srcdir)/bltGrPs.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltGrPs.c
+
+bltGrMarker.o:	$(srcdir)/bltGrMarker.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltGrMarker.c
+
+bltBgexec.o: 	$(srcdir)/bltBgexec.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltBgexec.c
+
+bltBitmap.o: 	$(srcdir)/bltBitmap.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltBitmap.c
+
+bltBusy.o: 	$(srcdir)/bltBusy.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltBusy.c
+
+bltDebug.o:	$(srcdir)/bltDebug.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltDebug.c
+
+bltDragDrop.o:	$(srcdir)/bltDragDrop.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltDragDrop.c
+
+bltHtext.o: 	$(srcdir)/bltHtext.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltHtext.c
+
+bltSpline.o: 	$(srcdir)/bltSpline.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltSpline.c
+
+bltTable.o: 	$(srcdir)/bltTable.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltTable.c
+
+bltTed.o: 	$(srcdir)/bltTed.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltTed.c
+
+bltVector.o:	$(srcdir)/bltVector.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltVector.c
+
+bltWatch.o:	$(srcdir)/bltWatch.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltWatch.c
+
+bltWinOp.o:	$(srcdir)/bltWinOp.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltWinOp.c
+
+bltInit.o: $(srcdir)/bltInit.c
+	$(CC) -c $(CC_SWITCHES) $(DEF_BLTINIT) $(srcdir)/bltInit.c
+
+bltInput.o: 	$(srcdir)/bltInput.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltInput.c
+
+bltList.o: 	$(srcdir)/bltList.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltList.c
+
+bltText.o: 	$(srcdir)/bltText.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltText.c
+
+bltTile.o: 	$(srcdir)/bltTile.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltTile.c
+
+bltUtil.o: 	$(srcdir)/bltUtil.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltUtil.c
+
+bltFrame.o: 	$(srcdir)/bltFrame.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltFrame.c
+
+bltScrollbar.o:	$(srcdir)/bltScrollbar.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltScrollbar.c
+
+bltPie.o:	$(srcdir)/bltPie.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltPie.c
+
+bltButton.o: 	$(srcdir)/bltButton.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/bltButton.c
+
+bltUnixButton.o:$(srcdir)/../unix/bltUnixButton.c
+	$(CC) -c $(CC_SWITCHES) $(srcdir)/../unix/bltUnixButton.c
+

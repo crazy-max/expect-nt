@@ -10,7 +10,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkTextMark.c 1.17 97/07/28 17:19:36
+ * SCCS: @(#) tkTextMark.c 1.18 97/10/20 11:12:50
  */
 
 #include "tkInt.h"
@@ -119,9 +119,9 @@ TkTextMarkCmd(textPtr, interp, argc, argv)
     c = argv[2][0];
     length = strlen(argv[2]);
     if ((c == 'g') && (strncmp(argv[2], "gravity", length) == 0)) {
-	if (argc > 5) {
+	if (argc < 4 || argc > 5) {
 	    Tcl_AppendResult(interp, "wrong # args: should be \"",
-		    argv[0], " mark gravity markName ?gravity?",
+		    argv[0], " mark gravity markName ?gravity?\"",
 		    (char *) NULL);
 	    return TCL_ERROR;
 	}

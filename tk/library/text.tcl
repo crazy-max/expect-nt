@@ -3,10 +3,10 @@
 # This file defines the default bindings for Tk text widgets and provides
 # procedures that help in implementing the bindings.
 #
-# SCCS: @(#) text.tcl 1.55 97/08/12 14:28:23
+# SCCS: @(#) text.tcl 1.58 97/09/17 18:54:56
 #
 # Copyright (c) 1992-1994 The Regents of the University of California.
-# Copyright (c) 1994-1996 Sun Microsystems, Inc.
+# Copyright (c) 1994-1997 Sun Microsystems, Inc.
 #
 # See the file "license.terms" for information on usage and redistribution
 # of this file, and for a DISCLAIMER OF ALL WARRANTIES.
@@ -271,6 +271,9 @@ bind Text <Meta-KeyPress> {# nothing}
 bind Text <Control-KeyPress> {# nothing}
 bind Text <Escape> {# nothing}
 bind Text <KP_Enter> {# nothing}
+if {$tcl_platform(platform) == "macintosh"} {
+	bind Text <Command-KeyPress> {# nothing}
+}
 
 # Additional emacs-like bindings:
 
@@ -897,9 +900,9 @@ proc tkTextTranspose w {
 # w -		Name of a text widget.
 
 proc tk_textCopy w {
-    clipboard clear -displayof $w
-    catch {
-	clipboard append -displayof $w [$w get sel.first sel.last]
+    if {![catch {set data [$w get sel.first sel.last]}]} {
+	clipboard clear -displayof $w
+	clipboard append -displayof $w $data
     }
 }
 
@@ -912,9 +915,9 @@ proc tk_textCopy w {
 # w -		Name of a text widget.
 
 proc tk_textCut w {
-    clipboard clear -displayof $w
-    catch {
-	clipboard append -displayof $w [$w get sel.first sel.last]
+    if {![catch {set data [$w get sel.first sel.last]}]} {
+	clipboard clear -displayof $w
+	clipboard append -displayof $w $data
 	$w delete sel.first sel.last
     }
 }

@@ -9,7 +9,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tkMenuDraw.c 1.45 97/07/31 09:09:55
+ * SCCS: @(#) tkMenuDraw.c 1.46 97/10/28 14:26:00
  */
 
 #include "tkMenu.h"
@@ -739,7 +739,9 @@ TkMenuEventProc(clientData, eventPtr)
 	TkEventuallyRecomputeMenu(menuPtr);
 	TkEventuallyRedrawMenu(menuPtr, (TkMenuEntry *) NULL);
     } else if (eventPtr->type == ActivateNotify) {
-    	TkpSetMainMenubar(menuPtr->interp, menuPtr->tkwin, NULL);
+    	if (menuPtr->menuType == TEAROFF_MENU) {
+    	    TkpSetMainMenubar(menuPtr->interp, menuPtr->tkwin, NULL);
+    	}
     } else if (eventPtr->type == DestroyNotify) {
 	if (menuPtr->tkwin != NULL) {
 	    menuPtr->tkwin = NULL;

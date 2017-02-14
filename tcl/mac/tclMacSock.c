@@ -8,7 +8,7 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclMacSock.c 1.57 97/07/30 18:49:35
+ * SCCS: @(#) tclMacSock.c 1.59 97/10/09 18:24:42
  */
 
 #include "tclInt.h"
@@ -78,6 +78,7 @@ typedef struct TcpState {
 				    * TCL_WRITABLE as set by Tcl_WatchFile. */
     Tcl_TcpAcceptProc *acceptProc; /* Proc to call on accept. */
     ClientData acceptProcData;	   /* The data for the accept proc. */
+    wdsEntry dataSegment[2];       /* List of buffers to be written async. */
     rdsEntry rdsarray[5+1];	   /* Array used when cleaning out recieve 
 				    * buffers on a closing socket. */
     Tcl_Channel channel;	   /* Channel associated with this socket. */
@@ -1161,7 +1162,6 @@ TcpOutput(
     StreamPtr tcpStream;
     OSErr err;
     int amount;
-    wdsEntry dataSegment[2];
     TCPiopb statusPB;
 
     *errorCodePtr = 0;
@@ -1210,13 +1210,13 @@ TcpOutput(
 	    if (toWrite < amount) {
 		amount = toWrite;
 	    }
-	    dataSegment[0].length = amount;
-	    dataSegment[0].ptr = buf;
-	    dataSegment[1].length = 0;
+	    statePtr->dataSegment[0].length = amount;
+	    statePtr->dataSegment[0].ptr = buf;
+	    statePtr->dataSegment[1].length = 0;
 	    InitMacTCPParamBlock(&statePtr->pb, TCPSend);
 	    statePtr->pb.ioCompletion = completeUPP;
 	    statePtr->pb.tcpStream = tcpStream;
-	    statePtr->pb.csParam.send.wdsPtr = (Ptr) dataSegment;
+	    statePtr->pb.csParam.send.wdsPtr = (Ptr) statePtr->dataSegment;
 	    statePtr->pb.csParam.send.pushFlag = 1;
 	    statePtr->pb.csParam.send.userDataPtr = (Ptr) statePtr;
 	    statePtr->flags |= TCP_WRITING;
@@ -2100,12 +2100,12 @@ TcpAccept(
  *
  * Tcl_GetHostName --
  *
- *	Returns the name of the local host.  The result is cached to
- *	be speedy after the first call.
+ *	Returns the name of the local host.
  *
  * Results:
- *	Returns a string containing the host name, or NULL on error.
- *	The returned string must be freed by the caller.
+ *	A string containing the network name for this machine, or
+ *	an empty string if we can't figure out the name.  The caller 
+ *	must not modify or free this string.
  *
  * Side effects:
  *	None.
@@ -2126,35 +2126,32 @@ Tcl_GetHostName()
         return hostname;
     }
     
-    if (TclHasSockets(NULL) != TCL_OK) {
-	hostname[0] = '\0';
-        hostnameInited = 1;
-	return hostname;
-    }
-
-    err = GetLocalAddress(&ourAddress);
-
-    if (err == noErr) {
-        /*
-         * Search for the doman name and return it if found.  Otherwise, 
-         * just print the IP number to a string and return that.
-         */
-
-        Tcl_DStringInit(&dString);
-        err = ResolveAddress(ourAddress, &dString);
+    if (TclHasSockets(NULL) == TCL_OK) {
+	err = GetLocalAddress(&ourAddress);
 	if (err == noErr) {
-	    strcpy(hostname, dString.string);
-	} else {
-	    sprintf(hostname, "%d.%d.%d.%d", ourAddress>>24, ourAddress>>16 & 0xff,
-		ourAddress>>8 & 0xff, ourAddress & 0xff);
+	    /*
+	     * Search for the doman name and return it if found.  Otherwise, 
+	     * just print the IP number to a string and return that.
+	     */
+
+	    Tcl_DStringInit(&dString);
+	    err = ResolveAddress(ourAddress, &dString);
+	    if (err == noErr) {
+		strcpy(hostname, dString.string);
+	    } else {
+		sprintf(hostname, "%d.%d.%d.%d", ourAddress>>24, ourAddress>>16 & 0xff,
+		    ourAddress>>8 & 0xff, ourAddress & 0xff);
+	    }
+	    Tcl_DStringFree(&dString);
+	    
+	    hostnameInited = 1;
+	    return hostname;
 	}
-	Tcl_DStringFree(&dString);
-	
-        hostnameInited = 1;
-        return hostname;
     }
-    
-    return (char *) NULL;
+
+    hostname[0] = '\0';
+    hostnameInited = 1;
+    return hostname;
 }
 
 /*

@@ -5,12 +5,12 @@
  *	Many thanks go to "Jay Lieske, Jr." <lieske@princeton.edu> who
  *	wrote the initial version of this file.
  *
- * Copyright (c) 1996 Sun Microsystems, Inc.
+ * Copyright (c) 1996-1997 Sun Microsystems, Inc.
  *
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclMacLibrary.r 1.4 97/08/13 16:53:02
+ * SCCS: @(#) tclMacLibrary.r 1.5 97/09/23 12:53:28
  */
 
 #include <Types.r>
@@ -143,6 +143,7 @@ resource 'STR ' (-16397, purgeable) {
 
 read 'TEXT' (TCL_LIBRARY_RESOURCES, "Init", purgeable) "::library:init.tcl";
 read 'TEXT' (TCL_LIBRARY_RESOURCES + 1, "History", purgeable) "::library:history.tcl";
+read 'TEXT' (TCL_LIBRARY_RESOURCES + 2, "Word", purgeable,preload) "::library:word.tcl";
 
 /*
  * The following are icons for the shared library.

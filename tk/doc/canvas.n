@@ -5,7 +5,7 @@
 '\" See the file "license.terms" for information on usage and redistribution
 '\" of this file, and for a DISCLAIMER OF ALL WARRANTIES.
 '\" 
-'\" SCCS: @(#) canvas.n 1.57 97/03/21 08:46:06
+'\" SCCS: @(#) canvas.n 1.58 97/10/31 12:58:45
 '\"
 .so man.macros
 .TH canvas n 4.0 Tk "Tk Built-In Commands"
@@ -14,7 +14,7 @@
 .SH NAME
 canvas \- Create and manipulate canvas widgets
 .SH SYNOPSIS
-\fBcanvas\fI \fIpathName \fR?\fIoptions\fR?
+\fBcanvas\fR \fIpathName \fR?\fIoptions\fR?
 .SO
 \-background	\-highlightthickness	\-insertwidth	\-takefocus
 \-borderwidth	\-insertbackground	\-relief	\-xscrollcommand
@@ -256,7 +256,7 @@ For each item that meets the constraints specified by
 \fItag\fR to the list of tags associated with the item if it
 isn't already present on that list.
 It is possible that no items will satisfy the constraints
-given by \fIsearchSpec and \fIarg\fRs, in which case the
+given by \fIsearchSpec\fR and \fIarg\fRs, in which case the
 command has no effect.
 This command returns an empty string as result.
 \fISearchSpec\fR and \fIarg\fR's may take any of the following

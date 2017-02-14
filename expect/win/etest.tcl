@@ -1,5 +1,5 @@
+#package require expect
 load expect52.dll Expect
-#load e:/usr/tools/src/tcl/tcl8.0a2/win/expect52.dll Expect
 
 # For now, have consoles visible
 set exp_nt_debug 1
@@ -45,6 +45,26 @@ proc pipe-zeego {} {
     # set timeout 10000
     global spawn_id
     spawn -pipes ftp
+    puts "spawn_id=$spawn_id"
+    expect "ftp> "
+    send "open zeego\r"
+    expect "(none)):"
+    send "test\r"
+    expect "Password:"
+    send "testPasswd\r"
+    expect "logged in."
+    # The following line is wrong on purpose
+    # expect "logged in>"
+    expect "ftp> "
+    send "ls\r"
+    expect "ftp> "
+}
+
+proc socket-zeego {} {
+    # set timeout -1
+    # set timeout 10000
+    global spawn_id
+    spawn -socket ftp
     puts "spawn_id=$spawn_id"
     expect "ftp> "
     send "open zeego\r"
@@ -292,7 +312,7 @@ proc serialtest {} {
     set exp_nt_debug 1
     global serid serfile
     global spawn_id;
-    set f [open com2: w+]
+    set f [open com1: w+]
     set setfile $f
     fconfigure $f -blocking 0 -buffering none -translation binary
     if [catch {
@@ -305,11 +325,13 @@ proc serialtest {} {
 	expect {
 	    "Password" {send "testPasswd\r"}
 	    eof {error "Premature EOF 0"}
+	    timeout {puts "Timeout 0"}
 	}
 	puts "*********** Debug B ***********"
 	expect {
 	    "zeego:" {}
 	    eof {error "Premature EOF 1"}
+	    timeout {puts "Timeout 1"}
 	}
 	set timeout 60
 	send "\\ls\r"
@@ -317,6 +339,7 @@ proc serialtest {} {
 	expect {
 	    "zeego:" {}
 	    eof {error "Premature EOF 2"}
+	    timeout {puts "Timeout 2"}
 	}
 	send "cd /usr/bin\r"
 	puts "*********** Debug D ***********"
@@ -362,6 +385,96 @@ proc modemtest {} {
     } msg] {
 	close $serid
 	puts "Error: $msg"
+    }
+}
+
+proc consoletest {} {
+    global x
+    fileevent stdin readable {gets stdin line; puts "Read: $line"}
+    set x 1
+    vwait x
+}
+
+proc crashtest {} {
+    set exp_nt_debug 1
+    spawn testcrash.exe
+}
+
+proc emacstest {opt} {
+    set exp_nt_debug 1
+
+    eval "spawn $opt emacs -nw"
+    send "\021"; send -null
+
+    for {set i 1} {$i <= 26} {incr i} {
+	set s [format "%03o" $i]
+	send "\021$s"
+    }
+
+    expect {
+	{\^@\^A\^B\^C\^D\^E\^F\^G\^H} {}
+	eof {error "unexpected eof: did not see ^@^A^B^C^D^E^F^G^H"}
+	timeout {set saw [expect *]; error "unexpected timeout: did not see ^@^A^B^C^D^E^F^G^H but saw $saw"}
+    }
+
+    expect {
+	{\^K\^L\^M\^N\^O\^P\^Q\^R\^S\^T\^U\^V\^W\^X\^Y\^Z} {}
+	eof {error "unexpected eof: did not see ^K^L^M^N^O^P^Q^R^S^T^U^V^W^X^Y^Z"}
+	timeout {error "unexpected timeout: did not see ^K^L^M^N^O^P^Q^R^S^T^U^V^W^X^Y^Z"}
+    }
+
+    send "testing    1 2 3 4 5"
+}
+
+proc emacs1 {} {
+    emacstest -socket
+}
+proc emacs2 {} {
+    emacstest {}
+}
+
+proc k95 {} {
+    set timeout 30
+    global spawn_id
+
+    exp_internal -f dbg.log 0
+    log_user 0
+    spawn k95beta.exe
+    expect {
+	"K-95" {set ok 1}
+	eof {error "Unexpected eof"}
+	timeout {error "Unexpected timeout: did not see k-95"}
+    }
+    send "telnet zeego\r"
+    expect {
+	"perspecta" {set ok 1}
+	eof {error "Unexpected eof"}
+	timeout {error "Unexpected timeout: did not see perspecta"}
+    }
+}
+
+proc k95loop {} {
+    set timeout 30000
+    global spawn_id
+
+    while {1} {
+	catch {exec rm -f dbg.log}
+	exp_internal -f dbg.log 0
+	log_user 0
+	spawn k95beta.exe
+	expect {
+	    "K-95" {set ok 1}
+	    eof {error "Unexpected eof"}
+	    timeout {error "Unexpected timeout: did not see k-95"}
+	}
+	send "telnet zeego\r"
+	expect {
+	    "perspecta" {set ok 1}
+	    eof {error "Unexpected eof"}
+	    timeout {error "Unexpected timeout: did not see perspecta"}
+	}
+	close
+	wait
     }
 }
 

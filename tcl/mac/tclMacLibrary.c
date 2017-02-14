@@ -13,12 +13,19 @@
  * See the file "license.terms" for information on usage and redistribution
  * of this file, and for a DISCLAIMER OF ALL WARRANTIES.
  *
- * SCCS: @(#) tclMacLibrary.c 1.2 96/09/11 21:08:15
+ * SCCS: @(#) tclMacLibrary.c 1.6 97/11/20 19:29:42
  */
+
+/*
+ * Here is another place that we are using the old routine names...
+ */
+ 
+#define OLDROUTINENAMES 1
 
 #include <CodeFragments.h>
 #include <Errors.h>
 #include <Resources.h>
+#include <Strings.h>
 #include "tclMacInt.h"
 
 /*
@@ -44,6 +51,16 @@ static void CloseLibraryResource _ANSI_ARGS_((void));
  * The refnum of the opened resource fork.
  */
 static short ourResFile = kResFileNotOpened;
+
+/*
+ * This is the resource token for the our resource file.
+ * It stores the name we registered with the resource facility.
+ * We only need to use this if we are actually registering ourselves.
+ */
+  
+#ifdef TCL_REGISTER_LIBRARY
+static Tcl_Obj *ourResToken;
+#endif
 
 /*
  *----------------------------------------------------------------------
@@ -72,7 +89,7 @@ TclMacInitializeFragment(
 #ifdef __MWERKS__
     {
     	extern OSErr __initialize( CFragInitBlock* initBlkPtr);
-    	err = __initialize(initBlkPtr);
+    	err = __initialize((CFragInitBlock *) initBlkPtr);
     }
 #endif
     if (err == noErr)
@@ -121,6 +138,10 @@ TclMacTerminateFragment()
  *	be opened, then the initialization function can pass on this 
  *	return value.
  *
+ *      If you #define TCL_REGISTER_RESOURCE before compiling this resource, 
+ *	then your library will register its open resource fork with the
+ *      resource command.
+ *
  * Results:
  *	It returns noErr on success and a MacOS error code on failure.
  *
@@ -135,13 +156,25 @@ static OSErr
 OpenLibraryResource(
     struct CFragInitBlock* initBlkPtr)
 {
+    /*
+     * The 3.0 version of the Universal headers changed CFragInitBlock
+     * to an opaque pointer type.  CFragSystem7InitBlock is now the
+     * real pointer.
+     */
+     
+#if !defined(UNIVERSAL_INTERFACES_VERSION) || (UNIVERSAL_INTERFACES_VERSION < 0x0300)
+    struct CFragInitBlock *realInitBlkPtr = initBlkPtr;
+#else 
+    CFragSystem7InitBlock *realInitBlkPtr = (CFragSystem7InitBlock *) initBlkPtr;
+#endif
     FSSpec* fileSpec = NULL;
     OSErr err = noErr;
     
-    if (initBlkPtr->fragLocator.where == kOnDiskFlat) {
-    	fileSpec = initBlkPtr->fragLocator.u.onDisk.fileSpec;
-    } else if (initBlkPtr->fragLocator.where == kOnDiskSegmented) {
-    	fileSpec = initBlkPtr->fragLocator.u.inSegs.fileSpec;
+
+    if (realInitBlkPtr->fragLocator.where == kOnDiskFlat) {
+    	fileSpec = realInitBlkPtr->fragLocator.u.onDisk.fileSpec;
+    } else if (realInitBlkPtr->fragLocator.where == kOnDiskSegmented) {
+    	fileSpec = realInitBlkPtr->fragLocator.u.inSegs.fileSpec;
     } else {
     	err = resFNotFound;
     }
@@ -151,10 +184,22 @@ OpenLibraryResource(
      * This will make it the current res file, ahead of the 
      * application's own resources.
      */
+    
     if (fileSpec != NULL) {
-	ourResFile = FSpOpenResFile( fileSpec, fsRdPerm);
+	ourResFile = FSpOpenResFile(fileSpec, fsRdPerm);
 	if (ourResFile == kResFileNotOpened) {
 	    err = ResError();
+	} else {
+#ifdef TCL_REGISTER_LIBRARY
+	    ourResToken = Tcl_NewObj();
+	    Tcl_IncrRefCount(ourResToken);
+	    p2cstr(realInitBlkPtr->libName);
+	    Tcl_SetStringObj(ourResToken, (char *) realInitBlkPtr->libName, -1);
+	    c2pstr((char *) realInitBlkPtr->libName);
+	    TclMacRegisterResourceFork(ourResFile, ourResToken,
+	            TCL_RESOURCE_DONT_CLOSE);
+#endif
+            SetResFileAttrs(ourResFile, mapReadOnly);
 	}
     }
     
@@ -183,6 +228,13 @@ static void
 CloseLibraryResource()
 {
     if (ourResFile != kResFileNotOpened) {
+#ifdef TCL_REGISTER_LIBRARY
+        int length;
+        TclMacUnRegisterResourceFork(
+	        Tcl_GetStringFromObj(ourResToken, &length),
+                NULL);
+        Tcl_DecrRefCount(ourResToken);
+#endif
 	CloseResFile(ourResFile);
 	ourResFile = kResFileNotOpened;
     }
